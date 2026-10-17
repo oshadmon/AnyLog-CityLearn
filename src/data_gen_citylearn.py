@@ -95,7 +95,7 @@ def data_gen(operators: list, configs: dict):
                 r["label"] = row[label]
                 r["round_number"] = r["time_step"] // spr + 1
                 r["data_type"] = "test" if r["time_step"] % spr >= spr * (1 - test_frac) else "train"
-                r["table_name"] = f"{pub['table']}_{r['data_type']}"
+                r["table"] = f"{pub['table']}_{r['data_type']}"
                 batches[(op["host"], f"{pub['table']}_{r['data_type']}")].append(r)
 
         for (host, table), rows in batches.items():

@@ -21,7 +21,7 @@ def main():
         raise SystemExit(f"No operators defined in {args.config}")
 
     for operator in operators:
-        run_msg_client(conn=operator.get("host"))
+        run_msg_client(conn=operator.get("host"), db_name=content.get("publish").get("dbms"))
 
     data_gen(operators=operators, configs=content)
     # query node provided in configs great. else use the first operator in the list as query node
