@@ -1,0 +1,49 @@
+# CityLearn -> AnyLog publisher.
+# Each operator is one community. Operator order assigns community ids when
+# community_id is omitted: the first operator is community_001, the second is
+# community_002, and so on.
+# Buildings are split across operators in order when an operator does not list
+# its own (17 buildings over 3 operators -> 6 / 6 / 5).
+operators:
+  - host: 172.23.160.85:32049
+    community_id: [community_a]
+    # buildings: [Building_1, Building_2, Building_3, Building_4, Building_5, Building_6]
+#  - host: 172.23.160.85:32149
+#    community_id: community_b
+#  - host: 172.23.160.85:32159
+#    community_id: community_c
+
+simulation:
+  schema: citylearn_challenge_2022_phase_all_plus_evs
+  # Local dataset folder (as in your step 1 script). null = CityLearn's own cache.
+  root: null
+  # Hours to simulate. 24 = one day, 168 = one week, 8760 = the full year.
+  steps: 672
+  seed: 0
+  # Timestamp of time_step 0. null = 1st of the data's first month, at its first hour.
+  start: null
+  year: 2022
+
+publish:
+  dbms: mydb
+  # Same table names on every operator, so one network query spans all communities.
+  # With fl.enabled, rows go to {table}_train and {table}_test; otherwise to {table}.
+  table: building_obs
+  # Used for community ids when an operator has no community_id.
+  community_prefix: community
+  # Pause between simulated steps. 0 = as fast as possible (history load);
+  # e.g. 2.0 = one simulated hour every 2 seconds (live stream).
+  interval_seconds: 0
+  # true = write rows_<community>.jsonl locally instead of sending to AnyLog.
+#  dry_run: false
+
+# Fields EdgeFL's data handlers expect (see the WINNIIO demo).
+fl:
+  enabled: true
+  # The value to forecast, taken from the same building's next step.
+  label: net_electricity_consumption
+  label_shift: 1
+  # Simulated steps per training round (168 = one week per round).
+  steps_per_round: 168
+  # Last share of each round held out as test data (split by time, not at random).
+  test_fraction: 0.2
