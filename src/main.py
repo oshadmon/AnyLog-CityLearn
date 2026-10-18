@@ -25,8 +25,8 @@ def main():
 
     data_gen(operators=operators, configs=content)
     # query node provided in configs great. else use the first operator in the list as query node
-    check_data(conn=content.get("query") if CONFIG_FILE.get("query") else operators[0].get("host"),
-               db_name=content.get("publish").get("dbms"))
+    # check_data(conn=content.get("query") if content.get("query") else operators[0].get("host"),
+    #            db_name=content.get("publish").get("dbms"))
 
 if __name__ == "__main__":
     main()

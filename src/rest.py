@@ -10,7 +10,7 @@ MAPPING_POLICY = {
     "id": TOPIC,
     "dbms": None,
     "table": "bring [table]",
-    "group_by_attributes": ["building_id"],
+    # "group_by_attributes": ["building_id"],
     "readings": "",
     "schema": {
       "timestamp": {
@@ -161,6 +161,7 @@ def __exec_command(method:str, conn:str, headers:dict, payload:str|None=None, ti
 
 
 def run_msg_client(conn:str, db_name:str):
+    global MAPPING_POLICY
     headers = {
         "command": f"blockchain get mapping where id={TOPIC}",
         "AnyLog-Agent": "AnyLog/1.23"
@@ -175,8 +176,8 @@ def run_msg_client(conn:str, db_name:str):
         __exec_command(method="POST", conn=conn, headers=headers, payload=f"<new_policy={json.dumps(MAPPING_POLICY)}>")
 
     headers = {
-        # f"run msg client where broker=rest and log=false and user-agent=anylog and master_node=!ledger_conn and topic=(name={TOPIC}/# and dynamic=true and policy={TOPIC})",
-        "command": f"run msg client where broker=local and log=false and master_node=!ledger_conn and topic=(name={TOPIC}/# and dynamic=true and policy={TOPIC})",
+        "command": f"run msg client where broker=rest and log=false and user-agent=anylog and master_node=!ledger_conn and topic=(name={TOPIC}/# and dynamic=true and policy={TOPIC})",
+        # "command": f"run msg client where broker=local and log=false and master_node=!ledger_conn and topic=(name={TOPIC}/# and dynamic=true and policy={TOPIC})",
         "AnyLog-Agent": "AnyLog/1.23"
     }
     __exec_command(method="POST", conn=conn, headers=headers, payload=f"<new_policy={json.dumps(MAPPING_POLICY)}>")
@@ -184,35 +185,35 @@ def run_msg_client(conn:str, db_name:str):
 
 def publish_to_anylog(conn, rows):
     """AnyLog REST PUT ingestion: the node creates the table from the JSON on first insert."""
-    client = mqtt_client.Client(
-        callback_api_version=mqtt_client.CallbackAPIVersion.VERSION1,
-        client_id="python-mqtt-publisher",
-    )
+    # client = mqtt_client.Client(
+    #     callback_api_version=mqtt_client.CallbackAPIVersion.VERSION1,
+    #     client_id="python-mqtt-publisher",
+    # )
 
-    try:
-        client.connect("172.23.160.85", 32050, keepalive=60)
-        client.loop_start()
-        for row in rows:
-            topic = f"citylearn-demo/{row.get('building_id')}"
-            client.publish(topic, json.dumps(row))
-        client.loop_stop()
-        client.disconnect()
-    except Exception as error:
-        raise Exception(f"Failed to publish (Error: {error})")
+    # try:
+    #     client.connect("172.23.160.85", 32050, keepalive=60)
+    #     client.loop_start()
+    #
+    #         topic = f"citylearn-demo/{row.get('building_id')}"
+    #         client.publish(topic, json.dumps(row))
+    #     client.loop_stop()
+    #     client.disconnect()
+    # except Exception as error:
+    #     raise Exception(f"Failed to publish (Error: {error})")
 
-        # headers = {
-        #     "command": "data",
-        #     "topic": f"citylearn-demo/{row.get('building_id')}",
-        #     "Content-Type": "text/plain",
-        #     "User-Agent": "AnyLog/1.23",
-        # }
-        #
-        # __exec_command(method="POST", conn=conn, headers=headers,
-        #                payload=json.dumps(row), timeout=30)
+    for row in rows:
+        headers = {
+            "command": "data",
+            "topic": f"citylearn-demo/{row.get('building_id')}",
+            "Content-Type": "text/plain",
+            "User-Agent": "AnyLog/1.23",
+        }
+
+        __exec_command(method="POST", conn=conn, headers=headers, payload=json.dumps(row), timeout=30)
 
 
 def post_to_anylog(conn:str, headers:dict, payload:str=None):
-    return __exec_command(conn=conn, headers=headers, payload=payload)
+    return __exec_command(method="POST", conn=conn, headers=headers, payload=payload)
 
 
 def msg_client(conn:str):
