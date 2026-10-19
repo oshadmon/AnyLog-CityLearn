@@ -21,7 +21,7 @@ import pickle
 import time
 
 from .client import Client
-from .data import discover
+from rest import discover
 from .load_forecast import LoadForecastTask
 
 # name in configs.yaml (training.task) -> Task class
@@ -123,7 +123,7 @@ def run_training(conn, configs, results_file=None, on_event=None, stop=None,
 
     # 3. how far: every site must have the round
     available = min(c.last_round() for c in clients)
-    last = min(available, int(until_round) if until_round else available)
+    last = min(available, int(until_round) if until_round is not None else available)
     if not saved and cfg.get("rounds"):
         last = min(last, int(cfg["rounds"]))
     if first_round > last:

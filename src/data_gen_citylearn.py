@@ -69,7 +69,8 @@ def live_start(first_hour):
     return start if start <= now else start - datetime.timedelta(days=1)
 
 
-def data_gen(operators: list, configs: dict, start=None, round_offset: int = 0, live: bool = False):
+def data_gen(operators: list, configs: dict, start=None, round_offset: int = 0, live: bool = False,
+             stop=None, on_step=None, interval=None):
     """
     Simulate once and publish every row to the operator that owns its building.
 
@@ -77,6 +78,9 @@ def data_gen(operators: list, configs: dict, start=None, round_offset: int = 0, 
                   1st of the data's first month (historical), or now (live).
     round_offset  added to every round_number, so a second pass continues where the first ended.
     live          only decides the default start (now instead of the data's own dates).
+    stop          optional threading.Event; the pass ends early once it is set.
+    on_step       optional callback, called after every simulated hour with a progress dict.
+    interval      seconds to pause after each simulated hour (default: publish.interval_seconds).
 
     Returns (start of the next pass, round_offset for the next pass).
     """
@@ -104,10 +108,13 @@ def data_gen(operators: list, configs: dict, start=None, round_offset: int = 0, 
     label, shift = fl.get("label", "net_electricity_consumption"), fl.get("label_shift", 1)
     spr, test_frac = int(fl.get("steps_per_round", 168)), fl.get("test_fraction", 0.2)
 
+    pause = pub.get("interval_seconds") if interval is None else interval
     pending = defaultdict(deque)  # building index -> rows waiting for their label
     sent = defaultdict(int)
     terminated = truncated = False
     while not (terminated or truncated):
+        if stop is not None and stop.is_set():
+            break
         actions = agent.predict(observations)
         t = env.time_step  # the step these observations describe
         next_obs, rewards, terminated, truncated, _ = env.step(actions)
@@ -134,9 +141,17 @@ def data_gen(operators: list, configs: dict, start=None, round_offset: int = 0, 
             publish_to_anylog(host, rows)
             sent[(host, table)] += len(rows)
 
+        if on_step:
+            on_step({"type": "step", "step": t + 1, "steps": steps, "round": round_offset + t // spr + 1,
+                     "timestamp": (start + datetime.timedelta(seconds=t * env.seconds_per_time_step)).strftime("%Y-%m-%d %H:%M"),
+                     "rows": sum(len(r) for r in batches.values()), "total_rows": sum(sent.values())})
+
         observations = next_obs
-        if pub.get("interval_seconds"):
-            time.sleep(pub["interval_seconds"])
+        if pause:
+            if stop is not None:
+                stop.wait(pause)  # wakes up early when stopped
+            else:
+                time.sleep(pause)
 
     env.close()
     rounds = -(-steps // spr)  # rounds this pass used, rounded up

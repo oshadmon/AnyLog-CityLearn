@@ -12,7 +12,16 @@ operators:
     community_id: community_c
 
 # Node used for queries and training. Defaults to the first operator.
-# query: 172.23.160.85:32049
+query: 172.23.160.85:32049
+
+# How every call to AnyLog is made (all of them go through src/rest.py).
+anylog:
+  user_agent: AnyLog/1.23
+  timeout: 60                                 # seconds per REST call
+  # REST topic the publisher sends to. The message client turns
+  # <topic>/<table>/<community>/<building> into the UNS path training.uns_root/... ("-" becomes "_").
+  topic: citylearn-demo
+  mapping_policy: configs/mapping_policy.json # "id" (the topic) and "dbms" (publish.dbms) are filled in at run time
 
 simulation:
   schema: citylearn_challenge_2022_phase_all_plus_evs
@@ -35,6 +44,14 @@ publish:
   # Pause between simulated hours. 0 = as fast as possible (history load);
   # e.g. 2.0 = one simulated hour every 2 seconds (live stream).
   interval_seconds: 0
+  # Pause per simulated hour for live data (GUI "Start live data", main.py --continuous-insert).
+  # 2 = one hour every 2 seconds, so a new week completes about every 6 minutes.
+  live_interval_seconds: 2
+
+
+# What main.py --train runs: fl (federated PyTorch model) | openstef (OpenSTEF, in its own venv).
+# --training-type on the command line overrides it.
+training_type: fl
 
 # Training fields added to each row at publish time.
 fl:
@@ -61,6 +78,33 @@ training:
   hidden: 64
   seed: 0
   results: results/fl_results.json   # relative to the repo root
+
+# OpenSTEF forecasts (main.py --training-type openstef, in its own venv: requirements-openstef.txt).
+# Reads the same UNS tree and tables as `training`. Each community gets its own model.
+openstef:
+  model: xgb                 # xgb | lgb | linear
+  quantiles: [0.1, 0.5, 0.9]
+  horizon_hours: 36
+  history_days: 14           # recent history handed to each forecast (lag features reach back 14 days)
+  train_days: null           # null = all history before the forecast window
+  min_train_days: 14         # weeks with less history than this are skipped
+  # Location for OpenSTEF's solar-position features. null = OpenSTEF's default (central Netherlands).
+  # It only shapes those features; CityLearn timestamps are local time labelled as UTC, so no
+  # location lines the sun up exactly. The measured radiation is used either way.
+  lat: null
+  lon: null
+  # What the hourly query returns per community: name -> aggregate over the community's buildings.
+  # load, temperature, relative_humidity, price and the two radiations map onto OpenSTEF's inputs;
+  # buildings is the completeness check (hours where it isn't the building count are dropped).
+  aggregates:
+    load: SUM(net_electricity_consumption)
+    temperature: AVG(outdoor_dry_bulb_temperature)
+    relative_humidity: AVG(outdoor_relative_humidity)
+    direct_radiation: AVG(direct_solar_irradiance)
+    diffuse_radiation: AVG(diffuse_solar_irradiance)
+    price: AVG(electricity_pricing)
+    buildings: COUNT(*)
+  results: results/openstef_results.json
 
 # Web GUI (src/gui.py).
 gui:

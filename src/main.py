@@ -2,105 +2,111 @@
   python src/main.py                          publish the simulated history, check it
   python src/main.py --skip-insert --train    train on what's already in AnyLog (from scratch)
   python src/main.py --skip-insert --train --resume
-                                              train only the rounds added since the saved model
+                                              only the weeks added since the last run
   python src/main.py --skip-insert --train --continuous-insert
                                               train on the history, then keep publishing new
-                                              (live) rounds and keep training on each one as it
-                                              completes, continuing from the saved model
+                                              (live) weeks and keep training on each one as it
+                                              completes, continuing from the last run
+  python src/main.py --skip-insert --train --follow
+                                              like --continuous-insert, but the live data comes
+                                              from another process (e.g. the GUI or a second main.py)
+
+  --training-type fl         federated PyTorch model (default, or `training_type` in the config)
+  --training-type openstef   OpenSTEF, one model per community; add --community / --rounds to narrow
+
+Two venvs, because OpenSTEF needs numpy 2 and CityLearn needs numpy < 2:
+  CityLearn + PyTorch (requirements.txt)          publishing, live data, --training-type fl, the GUI
+  OpenSTEF (requirements-openstef.txt)            --skip-insert --train --training-type openstef
+Models and CityLearn are imported only when used, so each venv runs its own part of this file.
 """
 import argparse
-import os
 import threading
 import time
 import traceback
 
+import pipeline
 import support
-from data_gen_citylearn import data_gen
-from rest import run_msg_client, check_data, publish_policy
-from fl.server import rounds_available, run_training
+from rest import check_data
 
-DIR_NAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(DIR_NAME, "configs", "configs.yaml")
+TRAINING_TYPES = ("fl", "openstef")
 
 
-def setup_operators(operators, db_name):
-    """Mapping policy + message client on every operator (both skip what already exists)."""
-    for operator in operators:
-        publish_policy(conn=operator.get("host"), db_name=db_name)
-        run_msg_client(conn=operator.get("host"))
+def train(settings, training_type, resume=False, live=False, communities=None, rounds=None):
+    """One training run of either kind. live=True leaves out the week still being filled."""
+    query_node = settings["query_node"]
+    if training_type == "fl":
+        from fl.server import run_training
 
+        return run_training(conn=query_node, configs=settings["training"], results_file=settings["results_file"],
+                            model_file=settings["model_file"], resume=resume,
+                            until_round=pipeline.complete_rounds(settings, live=True) if live else None)
 
-def insert_data(operators, content, repeat=False, start=None, round_offset=0, live=False):
-    """One pass over the simulation, or (repeat) pass after pass, each continuing the timestamps
-    and round numbers of the one before."""
-    while True:
-        start, round_offset = data_gen(operators, content, start=start, round_offset=round_offset, live=live)
-        if not repeat:
-            return start, round_offset
+    from fl_openstef.backtest import run_backtest
 
-
-def live_publisher(operators, content, round_offset):
-    """Background thread: publish new rounds forever, starting at round_offset + 1, timestamped from now."""
-    try:
-        insert_data(operators, content, repeat=True, round_offset=round_offset, live=True)
-    except Exception:
-        print("Live publishing stopped:")
-        traceback.print_exc()
+    cfg = dict(settings["openstef"])
+    if rounds:
+        cfg["rounds"] = rounds
+    return run_backtest(conn=query_node, settings=cfg, results_file=settings["openstef_results_file"],
+                        communities=communities, resume=resume, exclude_latest=live)
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=False, type=support.check_configs, default=CONFIG_FILE, help="Configuration  file")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--config", required=False, type=support.check_configs, default=pipeline.CONFIG_FILE, help="Configuration  file")
     parser.add_argument("--skip-insert", type=bool, nargs='?', default=False, const=True, help="Skip publishing the simulated history")
     parser.add_argument("--train", type=bool, nargs='?', default=False, const=True, help="Train on the data in AnyLog")
-    parser.add_argument("--resume", type=bool, nargs='?', default=False, const=True, help="Continue from the saved model instead of starting from scratch")
-    parser.add_argument("--continuous-insert", type=bool, nargs='?', default=False, const=True, help="Keep publishing new rounds (live), and with --train keep training on them")
+    parser.add_argument("--resume", type=bool, nargs='?', default=False, const=True, help="Only the weeks added since the last run")
+    parser.add_argument("--continuous-insert", type=bool, nargs='?', default=False, const=True, help="Keep publishing new weeks (live), and with --train keep training on them")
+    parser.add_argument("--follow", type=bool, nargs='?', default=False, const=True, help="With --train: keep training as new weeks arrive from another publisher")
+    parser.add_argument("--training-type", choices=TRAINING_TYPES, default=None, help="fl (PyTorch, federated) or openstef. Default: training_type in the config, else fl")
+    parser.add_argument("--community", action="append", help="OpenSTEF: only this community (repeatable)")
+    parser.add_argument("--rounds", nargs=2, type=int, metavar=("FIRST", "LAST"), help="OpenSTEF: only these weeks")
     args = parser.parse_args()
 
-    content = support.read_yaml(config_file=args.config)
-    operators = support.operator_info(content.pop("operators", None))
-    if not operators:
-        raise SystemExit(f"No operators defined in {args.config}")
-
-    db_name = content.get("publish").get("dbms")
-    training = content.get("training") or {}
-    results_file = os.path.join(DIR_NAME, training.get("results", "results/fl_results.json"))
-    model_file = os.path.join(DIR_NAME, training.get("model", "results/fl_model.pkl"))
-
-    # query node provided in configs great. else use the first operator in the list as query node
-    query_node = content.get("query") if content.get("query") else operators[0].get("host")
+    settings = pipeline.load_settings(args.config)
+    training_type = args.training_type or settings["training_type"]
+    if training_type not in TRAINING_TYPES:
+        raise SystemExit(f"Unknown training type {training_type!r}. Choose from {TRAINING_TYPES}")
 
     # 1. history
     if args.skip_insert is False:
-        setup_operators(operators, db_name)
-        insert_data(operators=operators, content=content)
+        pipeline.publish_history(settings)
 
-    data = check_data(conn=query_node, db_name=db_name)
+    data = check_data(conn=settings["query_node"], db_name=settings["db_name"],
+                      train_table=settings["training"].get("train_table", "building_obs_train"),
+                      test_table=settings["training"].get("test_table", "building_obs_test"))
+    if args.train and not data:
+        raise SystemExit("No data in AnyLog to train on. Publish the history first.")
 
     # 2. train on what's there
-    if args.train and data:
-        run_training(conn=query_node, configs=training, results_file=results_file,
-                     model_file=model_file, resume=args.resume)
+    if args.train:
+        train(settings, training_type, resume=args.resume, communities=args.community, rounds=args.rounds)
 
-    if not args.continuous_insert:
+    if not (args.continuous_insert or args.follow):
         return
 
-    # 3. live: publish new rounds in the background, continuing after the last round in AnyLog
-    setup_operators(operators, db_name)
-    last = rounds_available(query_node, training)
-    print(f"Live publishing from round {last + 1} on")
-    threading.Thread(target=live_publisher, args=(operators, content, last), daemon=True).start()
+    # 3. live: publish new weeks in the background (continuing after the last week in AnyLog),
+    #    and/or keep training as each new week completes
+    stop = threading.Event()
+    if args.continuous_insert:
+        def live():
+            try:
+                pipeline.publish_live(settings, stop=stop,
+                                      on_start=lambda week: print(f"Live publishing from week {week} on"))
+            except Exception:
+                print("Live publishing stopped:")
+                traceback.print_exc()
 
-    poll = int(training.get("poll_seconds", 60))
+        threading.Thread(target=live, daemon=True).start()
+
+    poll = int(settings["training"].get("poll_seconds", 60))
     try:
         while True:
             time.sleep(poll)
             if args.train:
-                # the newest round is still being filled, so train up to the one before it
-                complete = rounds_available(query_node, training) - 1
-                run_training(conn=query_node, configs=training, results_file=results_file,
-                             model_file=model_file, resume=True, until_round=complete)
+                train(settings, training_type, resume=True, live=True, communities=args.community)
     except KeyboardInterrupt:
+        stop.set()
         print("Stopped.")
 
 

@@ -1,0 +1,143 @@
+{
+  "mapping": {
+    "id": null,
+    "dbms": null,
+    "table": "bring [table]",
+    "group_by_attributes": ["building_id"],
+    "readings": "",
+    "schema": {
+      "timestamp": {
+        "type": "timestamp",
+        "default": "now()",
+        "bring": "[timestamp]",
+        "optional": false
+      },
+      "community_id": {
+        "type": "string",
+        "default": null,
+        "bring": "[community_id]",
+        "optional": false
+      },
+      "building_id": {
+        "type": "string",
+        "default": null,
+        "bring": "[building_id]",
+        "optional": false
+      },
+      "time_step": {
+        "type": "int",
+        "default": null,
+        "bring": "[time_step]",
+        "optional": true
+      },
+      "month": {
+        "type": "float",
+        "default": null,
+        "bring": "[month]",
+        "optional": true
+      },
+      "day_type": {
+        "type": "float",
+        "default": null,
+        "bring": "[day_type]",
+        "optional": true
+      },
+      "hour": {
+        "type": "float",
+        "default": null,
+        "bring": "[hour]",
+        "optional": true
+      },
+      "outdoor_dry_bulb_temperature": {
+        "type": "float",
+        "default": null,
+        "bring": "[outdoor_dry_bulb_temperature]",
+        "optional": true
+      },
+      "outdoor_relative_humidity": {
+        "type": "float",
+        "default": null,
+        "bring": "[outdoor_relative_humidity]",
+        "optional": true
+      },
+      "diffuse_solar_irradiance": {
+        "type": "float",
+        "default": null,
+        "bring": "[diffuse_solar_irradiance]",
+        "optional": true
+      },
+      "direct_solar_irradiance": {
+        "type": "float",
+        "default": null,
+        "bring": "[direct_solar_irradiance]",
+        "optional": true
+      },
+      "carbon_intensity": {
+        "type": "float",
+        "default": null,
+        "bring": "[carbon_intensity]",
+        "optional": true
+      },
+      "electricity_pricing": {
+        "type": "float",
+        "default": null,
+        "bring": "[electricity_pricing]",
+        "optional": true
+      },
+      "non_shiftable_load": {
+        "type": "float",
+        "default": null,
+        "bring": "[non_shiftable_load]",
+        "optional": true
+      },
+      "solar_generation": {
+        "type": "float",
+        "default": null,
+        "bring": "[solar_generation]",
+        "optional": true
+      },
+      "electrical_storage_soc": {
+        "type": "float",
+        "default": null,
+        "bring": "[electrical_storage_soc]",
+        "optional": true
+      },
+      "net_electricity_consumption": {
+        "type": "float",
+        "default": null,
+        "bring": "[net_electricity_consumption]",
+        "optional": true
+      },
+      "action_electrical_storage": {
+        "type": "float",
+        "default": null,
+        "bring": "[action_electrical_storage]",
+        "optional": true
+      },
+      "reward": {
+        "type": "float",
+        "default": null,
+        "bring": "[reward]",
+        "optional": true
+      },
+      "label": {
+        "type": "float",
+        "default": null,
+        "bring": "[label]",
+        "optional": true
+      },
+      "round_number": {
+        "type": "int",
+        "default": null,
+        "bring": "[round_number]",
+        "optional": false
+      },
+      "data_type": {
+        "type": "string",
+        "default": null,
+        "bring": "[data_type]",
+        "optional": false
+      }
+    }
+  }
+}

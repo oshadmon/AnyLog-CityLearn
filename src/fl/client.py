@@ -7,7 +7,7 @@ to each operator, so only states (weights) travel and the server code does not c
 """
 import json
 
-from .data import fetch, node_of
+from rest import fetch, node_of
 
 
 def round_where(round_number, history_rounds=1):
