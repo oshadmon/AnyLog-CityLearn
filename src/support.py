@@ -2,6 +2,9 @@ import argparse
 import os.path
 import yaml
 
+from concurrent.futures import ThreadPoolExecutor
+
+
 def check_configs(config_file:str):
     full_path = os.path.expanduser(os.path.expandvars(config_file))
     if os.path.isfile(full_path):
@@ -18,6 +21,8 @@ def operator_info(content):
 
             operators.append(row)
     return operators
+
+
 
 
 

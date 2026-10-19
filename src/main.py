@@ -2,10 +2,15 @@ import argparse
 import os
 import json
 
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+
 import support
 from data_gen_citylearn import data_gen
 from rest import run_msg_client, check_data, publish_policy
 from fl.server import run_training
+
+
 
 DIR_NAME = os.path.dirname(os.path.dirname(__file__))
 CONFIG_FILE = os.path.join(DIR_NAME, "configs", "configs.yaml")
@@ -31,7 +36,18 @@ def main():
         for operator in operators:
             publish_policy(conn=operator.get("host"), db_name=content.get("publish").get("dbms"))
             run_msg_client(conn=operator.get("host"))
-        data_gen(operators=operators, configs=content)
+
+        # insert data in parallel
+        with ThreadPoolExecutor(max_workers=len(operators)) as executor:
+            futures = [
+                executor.submit(data_gen, deepcopy(operator), deepcopy(content))
+                for operator in operators
+            ]
+
+            # Wait for all three runs and raise any exceptions
+            for future in futures:
+                future.result()
+        # data_gen(operators=operators, configs=content)
 
     # if "check" in steps:
     data = check_data(conn=query_node, db_name=content.get("publish").get("dbms"))

@@ -1,6 +1,6 @@
 import json
 import requests
-from paho.mqtt import client as mqtt_client
+# from paho.mqtt import client as mqtt_client
 
 TOPIC="citylearn-demo"
 
@@ -149,11 +149,14 @@ MAPPING_POLICY = {
   }
 }
 
-def __exec_command(method:str, conn:str, headers:dict, payload:str|None=None, timeout:int=30):
+def __exec_command(method:str, conn:str, headers:dict, payload:str|None=None, timeout:int=30,
+                   session:requests.Session | None = None):
+
+    command = session.request if session else requests.request
     try:
-        response = requests.request(method=method.upper(),
-                                    url=f"http://{conn}" if not conn.startswith("http") else conn,
-                                    headers=headers, data=payload, timeout=timeout)
+        response = command(method=method.upper(),
+                           url=f"http://{conn}" if not conn.startswith("http") else conn,
+                           headers=headers, data=payload, timeout=timeout)
         response.raise_for_status()
     except Exception as error:
         raise Exception(f"Failed to execute {method.upper()} against {conn} (Error: {error})")
@@ -217,17 +220,18 @@ def publish_to_anylog(conn, rows):
     try:
         # client.connect("172.23.160.85", 32050, keepalive=60)
         # client.loop_start()
-        for row in rows:
-            # topic = f"citylearn-demo/{row.get('building_id')}"
-            # client.publish(topic, json.dumps(row))
-            headers = {
-                "command": "data",
-                "topic": f"{TOPIC}/{row.get('table')}/{row.get('community_id')}/{row.get('building_id')}",
-                "Content-Type": "text/plain",
-                "User-Agent": "AnyLog/1.23",
-            }
-
-            __exec_command(method="POST", conn=conn, headers=headers, payload=json.dumps(row), timeout=30)
+        with requests.Session() as session:
+            for row in rows:
+                # topic = f"citylearn-demo/{row.get('building_id')}"
+                # client.publish(topic, json.dumps(row))
+                headers = {
+                    "command": "data",
+                    "topic": f"{TOPIC}/{row.get('table')}/{row.get('community_id')}/{row.get('building_id')}",
+                    "Content-Type": "text/plain",
+                    "User-Agent": "AnyLog/1.23",
+                }
+                __exec_command(method="POST", conn=conn, headers=headers, payload=json.dumps(row), timeout=30,
+                               session=session)
 
         # client.loop_stop()
         # client.disconnect()
