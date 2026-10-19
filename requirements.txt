@@ -1,3 +1,5 @@
 requests>=0.0
 paho-mqtt>=0.0
 citylearn>=0.0
+numpy>=0.0
+torch>=0.0

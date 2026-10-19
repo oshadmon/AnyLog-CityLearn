@@ -1,0 +1,316 @@
+{
+  "task": "load_forecast",
+  "uns_root": "citylearn_demo",
+  "config": {},
+  "sites": {
+    "community_a": [
+      "building_1",
+      "building_2",
+      "building_3",
+      "building_4",
+      "building_5",
+      "building_6"
+    ],
+    "community_b": [
+      "building_10",
+      "building_11",
+      "building_12",
+      "building_7",
+      "building_8",
+      "building_9"
+    ],
+    "community_c": [
+      "building_13",
+      "building_14",
+      "building_15",
+      "building_16",
+      "building_17"
+    ]
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "rows": {
+        "community_a": 810,
+        "community_b": 810,
+        "community_c": 675
+      },
+      "scores": {
+        "community_a": {
+          "federated": {
+            "mae_kwh": 0.7997,
+            "rmse_kwh": 1.2904,
+            "r2": 0.7506,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.7766,
+            "rmse_kwh": 1.2765,
+            "r2": 0.7559,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.9525,
+            "rmse_kwh": 1.6509,
+            "r2": 0.5917,
+            "samples": 780
+          }
+        },
+        "community_b": {
+          "federated": {
+            "mae_kwh": 0.6922,
+            "rmse_kwh": 1.1499,
+            "r2": 0.7521,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.6773,
+            "rmse_kwh": 1.0931,
+            "r2": 0.776,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.6894,
+            "rmse_kwh": 1.3507,
+            "r2": 0.658,
+            "samples": 780
+          }
+        },
+        "community_c": {
+          "federated": {
+            "mae_kwh": 0.8677,
+            "rmse_kwh": 1.4224,
+            "r2": 0.7603,
+            "samples": 650
+          },
+          "local": {
+            "mae_kwh": 0.6195,
+            "rmse_kwh": 1.1173,
+            "r2": 0.8521,
+            "samples": 650
+          },
+          "baseline": {
+            "mae_kwh": 0.7863,
+            "rmse_kwh": 1.4461,
+            "r2": 0.7523,
+            "samples": 650
+          }
+        }
+      },
+      "seconds": 4.3
+    },
+    {
+      "round": 2,
+      "rows": {
+        "community_a": 810,
+        "community_b": 810,
+        "community_c": 675
+      },
+      "scores": {
+        "community_a": {
+          "federated": {
+            "mae_kwh": 0.6842,
+            "rmse_kwh": 1.2161,
+            "r2": 0.7784,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.6746,
+            "rmse_kwh": 1.2101,
+            "r2": 0.7806,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.9525,
+            "rmse_kwh": 1.6509,
+            "r2": 0.5917,
+            "samples": 780
+          }
+        },
+        "community_b": {
+          "federated": {
+            "mae_kwh": 0.6505,
+            "rmse_kwh": 1.1023,
+            "r2": 0.7722,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.6066,
+            "rmse_kwh": 1.0613,
+            "r2": 0.7888,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.6894,
+            "rmse_kwh": 1.3507,
+            "r2": 0.658,
+            "samples": 780
+          }
+        },
+        "community_c": {
+          "federated": {
+            "mae_kwh": 0.7342,
+            "rmse_kwh": 1.246,
+            "r2": 0.8161,
+            "samples": 650
+          },
+          "local": {
+            "mae_kwh": 0.6049,
+            "rmse_kwh": 1.089,
+            "r2": 0.8595,
+            "samples": 650
+          },
+          "baseline": {
+            "mae_kwh": 0.7863,
+            "rmse_kwh": 1.4461,
+            "r2": 0.7523,
+            "samples": 650
+          }
+        }
+      },
+      "seconds": 2.2
+    },
+    {
+      "round": 3,
+      "rows": {
+        "community_a": 810,
+        "community_b": 810,
+        "community_c": 675
+      },
+      "scores": {
+        "community_a": {
+          "federated": {
+            "mae_kwh": 0.6506,
+            "rmse_kwh": 1.2089,
+            "r2": 0.7811,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.6761,
+            "rmse_kwh": 1.1891,
+            "r2": 0.7882,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.9525,
+            "rmse_kwh": 1.6509,
+            "r2": 0.5917,
+            "samples": 780
+          }
+        },
+        "community_b": {
+          "federated": {
+            "mae_kwh": 0.6386,
+            "rmse_kwh": 1.1404,
+            "r2": 0.7562,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.5734,
+            "rmse_kwh": 1.0657,
+            "r2": 0.7871,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.6894,
+            "rmse_kwh": 1.3507,
+            "r2": 0.658,
+            "samples": 780
+          }
+        },
+        "community_c": {
+          "federated": {
+            "mae_kwh": 0.75,
+            "rmse_kwh": 1.3124,
+            "r2": 0.796,
+            "samples": 650
+          },
+          "local": {
+            "mae_kwh": 0.7252,
+            "rmse_kwh": 1.2065,
+            "r2": 0.8276,
+            "samples": 650
+          },
+          "baseline": {
+            "mae_kwh": 0.7863,
+            "rmse_kwh": 1.4461,
+            "r2": 0.7523,
+            "samples": 650
+          }
+        }
+      },
+      "seconds": 2.0
+    },
+    {
+      "round": 4,
+      "rows": {
+        "community_a": 810,
+        "community_b": 810,
+        "community_c": 675
+      },
+      "scores": {
+        "community_a": {
+          "federated": {
+            "mae_kwh": 0.6541,
+            "rmse_kwh": 1.2183,
+            "r2": 0.7777,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.9784,
+            "rmse_kwh": 1.5486,
+            "r2": 0.6407,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.9525,
+            "rmse_kwh": 1.6509,
+            "r2": 0.5917,
+            "samples": 780
+          }
+        },
+        "community_b": {
+          "federated": {
+            "mae_kwh": 0.6364,
+            "rmse_kwh": 1.1348,
+            "r2": 0.7586,
+            "samples": 780
+          },
+          "local": {
+            "mae_kwh": 0.5919,
+            "rmse_kwh": 1.0609,
+            "r2": 0.789,
+            "samples": 780
+          },
+          "baseline": {
+            "mae_kwh": 0.6894,
+            "rmse_kwh": 1.3507,
+            "r2": 0.658,
+            "samples": 780
+          }
+        },
+        "community_c": {
+          "federated": {
+            "mae_kwh": 0.8096,
+            "rmse_kwh": 1.38,
+            "r2": 0.7744,
+            "samples": 650
+          },
+          "local": {
+            "mae_kwh": 0.7971,
+            "rmse_kwh": 1.2807,
+            "r2": 0.8057,
+            "samples": 650
+          },
+          "baseline": {
+            "mae_kwh": 0.7863,
+            "rmse_kwh": 1.4461,
+            "r2": 0.7523,
+            "samples": 650
+          }
+        }
+      },
+      "seconds": 1.7
+    }
+  ]
+}
