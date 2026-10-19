@@ -80,6 +80,30 @@ class LoadForecastTask(Task):
     name = "load_forecast"
     columns = RAW_COLUMNS + ["label"]
 
+    title = "Next-hour energy forecast"
+    summary = ("Predict how much electricity each building will draw from the grid in the next hour, "
+               "from what it is doing now: weather, price, solar output and battery level.")
+    local_step = "Each community improves the shared forecasting model using only its own buildings' history."
+    combine_step = ("The center averages the improved models into one, giving more weight to "
+                    "communities with more data, and sends it back to everyone.")
+    travels = "Only the model's numbers (its weights). Never a building's readings."
+    metric = "mae_kwh"
+    metric_label = "Average forecast error (kWh per building-hour)"
+    lower_is_better = True
+    series = {
+        "federated": "Learned together",
+        "local": "Learned alone",
+        "baseline": "Simple guess (next hour = this hour)",
+    }
+    settings = [
+        {"key": "epochs", "label": "Practice passes per round", "min": 1, "max": 100, "step": 1, "default": 30,
+         "help": "How many times each community goes over its own data before sending its model in."},
+        {"key": "learning_rate", "label": "Learning speed", "min": 0.0001, "max": 0.01, "step": 0.0001,
+         "default": 0.001, "help": "Bigger steps learn faster but can overshoot."},
+        {"key": "hidden", "label": "Model size", "min": 8, "max": 256, "step": 8, "default": 64,
+         "help": "Neurons per layer. Bigger models can learn more, but need more data."},
+    ]
+
     def __init__(self, epochs=30, batch_size=64, learning_rate=0.001, hidden=64, seed=0, **_):
         self.epochs, self.batch_size = int(epochs), int(batch_size)
         self.learning_rate, self.hidden, self.seed = float(learning_rate), int(hidden), int(seed)

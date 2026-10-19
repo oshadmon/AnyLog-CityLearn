@@ -5,7 +5,9 @@ Narrow interface on purpose: train(round, states) and evaluate(states). Today th
 calls these in-process; later the same two calls can sit behind a small HTTP service next
 to each operator, so only states (weights) travel and the server code does not change.
 """
-from .data import fetch
+import json
+
+from .data import fetch, node_of
 
 
 def round_where(round_number, history_rounds=1):
@@ -23,6 +25,12 @@ class Client:
         self.train_leaves, self.test_leaves = train_leaves, test_leaves
         self.history_rounds = history_rounds
         self._test_rows = None
+        self.last_rows_bytes = 0  # size of the raw rows read in the last train() call
+
+    @property
+    def node(self):
+        """(name, address) of the operator holding this site's data."""
+        return node_of(self.train_leaves[0]) if self.train_leaves else ("unknown", "")
 
     @property
     def assets(self):
@@ -37,6 +45,7 @@ class Client:
         Returns (new states, rows used)."""
         rows = fetch(self.conn, self.train_leaves, self.task.columns,
                      round_where(round_number, self.history_rounds))
+        self.last_rows_bytes = len(json.dumps(rows))
         return {name: self.task.train(state, rows) for name, state in states.items()}, len(rows)
 
     def evaluate(self, states):

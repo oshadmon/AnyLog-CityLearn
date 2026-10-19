@@ -1,5 +1,8 @@
+# using python3.11.9
 requests>=0.0
 paho-mqtt>=0.0
 citylearn>=0.0
 numpy>=0.0
 torch>=0.0
+fastapi>=0.0
+uvicorn>=0.0

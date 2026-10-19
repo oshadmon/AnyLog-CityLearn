@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning across sites with AnyLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #eef1ef;
+  --panel: #fbfcfb;
+  --ink: #14232b;
+  --ink-2: #4a5a61;
+  --ink-3: #75848a;
+  --line: #cfd8d5;
+  --grid: #e1e7e4;
+  --shared: #2a78d6;        /* blue: travels / learned together */
+  --shared-soft: #d9e7f8;
+  --local: #eb6834;         /* orange: stays at the site / learned alone */
+  --local-soft: #fbe3d9;
+  --neutral: #8a979c;       /* the simple guess */
+  --good: #1e7a4c;
+  --bad: #b23a36;
+  --focus: #2a78d6;
+  --radius-lg: 14px;
+  --radius-sm: 6px;
+  --font: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #11191d; --panel: #182227; --ink: #e8eef0; --ink-2: #b4c1c6; --ink-3: #87959b;
+    --line: #2c3a40; --grid: #223036; --shared: #3987e5; --shared-soft: #1b3150;
+    --local: #d95926; --local-soft: #3d2419; --neutral: #8e9ca1; --good: #4fb882; --bad: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11191d; --panel: #182227; --ink: #e8eef0; --ink-2: #b4c1c6; --ink-3: #87959b;
+  --line: #2c3a40; --grid: #223036; --shared: #3987e5; --shared-soft: #1b3150;
+  --local: #d95926; --local-soft: #3d2419; --neutral: #8e9ca1; --good: #4fb882; --bad: #e66767;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: 16px; line-height: 1.5;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+button, select, input { font: inherit; color: inherit; }
+code, .code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.86em; }
+
+/* ---------- top bar ---------- */
+.top {
+  position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+}
+.top-inner { max-width: 1180px; margin: 0 auto; padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.brand { font-weight: 750; font-stretch: 112%; letter-spacing: -0.01em; font-size: 1.05rem; margin-right: auto; }
+.brand span { color: var(--ink-3); font-weight: 450; font-stretch: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--panel); }
+.seg button { border: 0; background: none; padding: 5px 14px; border-radius: 999px; cursor: pointer; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.icon-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; width: 36px; height: 36px; cursor: pointer; }
+
+/* ---------- step rail ---------- */
+main { min-width: 0; }
+.layout { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; display: grid; grid-template-columns: 220px 1fr; gap: 32px; }
+.rail { position: sticky; top: 76px; align-self: start; }
+.rail ol { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+.rail li { counter-increment: s; }
+.rail a {
+  display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 10px 8px;
+  color: var(--ink-2); text-decoration: none; border-radius: var(--radius-sm);
+}
+.rail a::before {
+  content: counter(s); width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--line);
+  display: grid; place-items: center; font-weight: 650; font-size: 0.85rem; background: var(--panel);
+}
+.rail a[aria-current="step"] { color: var(--ink); }
+.rail a[aria-current="step"]::before { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.rail a.done::before { border-color: var(--shared); color: var(--shared); }
+.rail .r-title { font-weight: 600; line-height: 1.25; }
+.rail .r-sub { display: block; font-size: 0.82rem; color: var(--ink-3); font-weight: 400; }
+
+/* ---------- sections ---------- */
+section.step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 32px clamp(18px, 4vw, 40px); margin-bottom: 28px; }
+body.guided section.step:not(.active) { display: none; }
+h1, h2, h3 { margin: 0; line-height: 1.15; letter-spacing: -0.015em; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.15rem); font-weight: 760; font-stretch: 115%; max-width: 22ch; }
+h3 { font-size: 1.05rem; font-weight: 650; }
+.lede { font-size: 1.12rem; color: var(--ink-2); max-width: 62ch; margin: 12px 0 24px; }
+.muted { color: var(--ink-3); }
+.explain {
+  border-left: 3px solid var(--line); padding: 4px 0 4px 16px; margin: 24px 0 0; color: var(--ink-2); max-width: 70ch;
+}
+.explain strong { color: var(--ink); }
+.nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line); }
+body:not(.guided) .nav { display: none; }
+
+.btn { border: 1px solid var(--ink); background: var(--ink); color: var(--panel); padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 600; }
+.btn.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.go { background: var(--shared); border-color: var(--shared); color: #fff; }
+
+.status { display: flex; gap: 10px; align-items: center; color: var(--ink-2); font-size: 0.92rem; min-height: 24px; }
+.status.err { color: var(--bad); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--shared); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- step 1: sites ---------- */
+.sites { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.site { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px; background: var(--bg); }
+.site h3 { font-stretch: 110%; }
+.site .node { font-size: 0.85rem; color: var(--ink-3); margin: 2px 0 14px; }
+.site .count { font-size: 2rem; font-weight: 750; font-stretch: 110%; line-height: 1; font-variant-numeric: tabular-nums; }
+.site .count-label { color: var(--ink-2); font-size: 0.9rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.chip { font-size: 0.78rem; padding: 3px 8px; border-radius: 999px; background: var(--local-soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--local) 35%, transparent); }
+.facts { display: flex; gap: 18px; margin-top: 12px; font-size: 0.85rem; color: var(--ink-2); flex-wrap: wrap; }
+
+/* ---------- step 2: lookup ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 20px; }
+label.field { display: grid; gap: 4px; font-size: 0.85rem; color: var(--ink-2); }
+select, input[type="number"] { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius-sm); padding: 8px 10px; min-width: 150px; }
+.trace { display: grid; gap: 0; }
+.hop { display: grid; grid-template-columns: 34px 1fr; gap: 14px; }
+.hop .dot { display: grid; justify-items: center; }
+.hop .dot::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 2px solid var(--ink); margin-top: 6px; }
+.hop .dot::after { content: ""; width: 2px; flex: 1; background: var(--line); min-height: 20px; }
+.hop:last-child .dot::after { display: none; }
+.hop .body { padding-bottom: 20px; min-width: 0; }
+.hop .say { font-weight: 600; }
+.hop .detail { color: var(--ink-2); font-size: 0.92rem; }
+.path { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.path span { background: var(--bg); border: 1px solid var(--line); padding: 2px 8px; border-radius: var(--radius-sm); font-size: 0.85rem; }
+.path span + span::before { content: "/ "; color: var(--ink-3); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin-top: 8px; font-size: 0.9rem; }
+.kv dt { color: var(--ink-3); } .kv dd { margin: 0; }
+pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
+.tablewrap { overflow-x: auto; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+table { border-collapse: collapse; width: 100%; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--ink-3); font-weight: 600; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+
+/* ---------- step 3: training ---------- */
+.train-grid { display: grid; gap: 16px; }
+.train-controls { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, 1fr); gap: 16px; align-items: start; }
+.diagram { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg); padding: 8px; }
+.diagram svg { display: block; width: 100%; height: auto; }
+.d-label { font-family: var(--font); fill: var(--ink); font-size: 19px; font-weight: 650; }
+.d-sub { font-family: var(--font); fill: var(--ink-3); font-size: 14px; }
+.d-box { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.d-box.active { stroke: var(--local); stroke-width: 2.5; }
+.d-center { fill: var(--panel); stroke: var(--shared); stroke-width: 2; }
+.d-center.pulse { animation: pulse 0.9s ease-out; }
+@keyframes pulse { 0% { stroke-width: 2; } 40% { stroke-width: 7; } 100% { stroke-width: 2; } }
+.d-wire { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 5; fill: none; }
+.d-data { fill: var(--local); }
+.d-box.active ~ .d-data, .d-data.busy { animation: blink 0.7s ease-in-out infinite alternate; }
+@keyframes blink { from { opacity: 1; } to { opacity: 0.35; } }
+.d-packet { fill: var(--shared); stroke: var(--panel); stroke-width: 2; }
+.legend-inline { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.85rem; color: var(--ink-2); margin: 10px 4px 2px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+.sw.local { background: var(--local); } .sw.shared { background: var(--shared); border-radius: 50%; }
+
+.panel { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px; background: var(--bg); }
+.panel + .panel { margin-top: 16px; }
+.meter { display: grid; gap: 10px; }
+.meter .row { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 0.9rem; }
+.meter .val { font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar { grid-column: 1 / -1; height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.bar i { display: block; height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.bar.local i { background: var(--local); } .bar.shared i { background: var(--shared); }
+.roundline { font-weight: 650; font-size: 1.05rem; margin-bottom: 8px; }
+.setting { display: grid; gap: 2px; margin-bottom: 14px; }
+.setting .top-row { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.setting .top-row b { font-variant-numeric: tabular-nums; }
+.setting input[type="range"] { width: 100%; accent-color: var(--ink); }
+.setting small { color: var(--ink-3); font-size: 0.8rem; }
+details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ---------- chart ---------- */
+.chart-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin: 28px 0 10px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.88rem; color: var(--ink-2); }
+.legend .ln { display: inline-block; width: 22px; height: 0; border-top: 2px solid; vertical-align: 4px; margin-right: 6px; }
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.mult { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px 12px 6px; background: var(--panel); position: relative; }
+.mult h4 { margin: 0 0 4px 4px; font-size: 0.95rem; font-weight: 650; }
+.mult svg { display: block; width: 100%; height: auto; overflow: visible; }
+.axis text { font-family: var(--font); fill: var(--ink-3); font-size: 11px; }
+.axis line { stroke: var(--grid); }
+.tip {
+  position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); padding: 8px 10px; border-radius: 8px;
+  font-size: 0.8rem; line-height: 1.4; white-space: nowrap; z-index: 2; transform: translate(-50%, -100%); display: none;
+}
+.tip .ln { display: inline-block; width: 14px; border-top: 2px solid; vertical-align: 3px; margin-right: 6px; }
+.empty { border: 1.5px dashed var(--line); border-radius: var(--radius-lg); padding: 28px; text-align: center; color: var(--ink-2); }
+
+/* ---------- step 4 ---------- */
+.verdicts { display: grid; gap: 12px; margin-top: 8px; }
+.verdict { display: grid; grid-template-columns: 170px 1fr; gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.verdict:last-child { border-bottom: 0; }
+.verdict .who { font-weight: 650; }
+.big { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 780; font-stretch: 115%; line-height: 1; font-variant-numeric: tabular-nums; }
+.headline { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 8px 0 24px; }
+.headline .panel, .next .panel { margin-top: 0; }
+.headline .panel p { margin: 6px 0 0; color: var(--ink-2); font-size: 0.92rem; }
+.next { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+.next ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 16px; }
+  .rail { position: static; }
+  .rail ol { display: flex; gap: 4px; }
+  .rail li { flex: 0 0 auto; }
+  .rail a { grid-template-columns: 28px; }
+  .rail a .r-title { display: none; }
+  .rail a[aria-current="step"] { grid-template-columns: 28px auto; }
+  .rail a[aria-current="step"] .r-title { display: block; }
+  .rail .r-sub { display: none; }
+  .train-controls { grid-template-columns: minmax(0, 1fr); }
+  .brand span { display: none; }
+  .verdict { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body class="guided">
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">AnyLog for LF Energy <span>CityLearn demo</span></div>
+    <div class="seg" role="group" aria-label="How to view the demo">
+      <button id="mode-guided" aria-pressed="true">Guided tour</button>
+      <button id="mode-explore" aria-pressed="false">Explore freely</button>
+    </div>
+    <button class="icon-btn" id="theme" aria-label="Switch light or dark">◐</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="rail" aria-label="Steps">
+    <ol>
+      <li><a href="#s1" data-step="1"><span class="r-title">Where the data lives<span class="r-sub">Three communities, three nodes</span></span></a></li>
+      <li><a href="#s2" data-step="2"><span class="r-title">Find any building<span class="r-sub">Look it up by name</span></span></a></li>
+      <li><a href="#s3" data-step="3"><span class="r-title">Learn together<span class="r-sub">Share models, not data</span></span></a></li>
+      <li><a href="#s4" data-step="4"><span class="r-title">What it means<span class="r-sub">Results in plain words</span></span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <!-- ================= 1 ================= -->
+    <section class="step" id="s1" data-step="1">
+      <h2>Every community keeps its own energy data</h2>
+      <p class="lede">These are real readings from a simulated neighborhood: hourly electricity use, solar output,
+        batteries, weather and prices for <span id="s1-assets">each building</span>. Each community's readings are stored on
+        <em>its own</em> AnyLog node. Nothing was copied into a central database.</p>
+      <div class="status" id="s1-status"><span class="spinner"></span> Asking the network what it holds…</div>
+      <div class="sites" id="sites"></div>
+      <p class="explain"><strong>What is AnyLog?</strong> A network of nodes that each keep their own data where it was
+        produced, yet answer questions together as if they were one database. Here, each node stands for one
+        community's utility or building operator.</p>
+      <div class="nav"><span></span><button class="btn" data-next>Next: find a building</button></div>
+    </section>
+
+    <!-- ================= 2 ================= -->
+    <section class="step" id="s2" data-step="2">
+      <h2>Ask for a building by name, not by location</h2>
+      <p class="lede">You don't need to know which node holds a building's data. Pick one, and watch how AnyLog
+        finds it and fetches it.</p>
+      <div class="controls">
+        <label class="field">Data<select id="lk-table"></select></label>
+        <label class="field">Community<select id="lk-site"></select></label>
+        <label class="field">Building<select id="lk-asset"></select></label>
+        <button class="btn" id="lk-go">Look it up</button>
+      </div>
+      <div class="status" id="s2-status"></div>
+      <div class="trace" id="trace"></div>
+      <p class="explain"><strong>What is the UNS?</strong> The Unified Namespace is a shared directory of names, like
+        a phone book for data. Each name, such as a building, points to where its readings are stored. Programs ask
+        by name, so they keep working when data moves or new sites join.</p>
+      <div class="nav"><button class="btn secondary" data-prev>Back</button><button class="btn" data-next>Next: learn together</button></div>
+    </section>
+
+    <!-- ================= 3 ================= -->
+    <section class="step" id="s3" data-step="3">
+      <h2 id="s3-title">Learn from everyone's data without pooling it</h2>
+      <p class="lede" id="s3-lede"></p>
+
+      <div class="train-grid">
+        <div>
+          <div class="diagram"><svg id="diagram" viewBox="0 0 800 380" role="img" aria-label="Communities sending model updates to the center"></svg></div>
+          <div class="legend-inline">
+            <span><i class="sw local"></i>Building readings: stay in the community</span>
+            <span><i class="sw shared"></i><span id="travels-short">Model update: travels</span></span>
+          </div>
+        </div>
+        <div class="train-controls">
+          <div class="panel">
+            <div class="roundline" id="roundline">Ready when you are</div>
+            <div class="status" id="s3-status"></div>
+            <div class="meter">
+              <div class="row"><span>Building readings the communities learned from</span><span class="val" id="m-raw">0 KB</span><div class="bar local"><i id="b-raw" style="width:0"></i></div></div>
+              <div class="row"><span>Model numbers that travelled to and from the center</span><span class="val" id="m-sent">0 KB</span><div class="bar shared"><i id="b-sent" style="width:0"></i></div></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:0">
+            <details class="settings" id="settings-box">
+              <summary>Settings</summary>
+              <div id="settings"></div>
+            </details>
+            <div class="actions">
+              <button class="btn go" id="run-go">Start training</button>
+              <button class="btn secondary" id="run-stop" disabled>Stop</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-head">
+        <div>
+          <h3 id="chart-title">Forecast error per community</h3>
+          <div class="muted" id="chart-sub">Lower is better. One point per round.</div>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="multiples" id="multiples"><div class="empty">Start training to see each community's results appear round by round.</div></div>
+      <p><button class="btn secondary" id="toggle-table" hidden>Show the numbers</button></p>
+      <div class="tablewrap" id="score-table" hidden></div>
+
+      <p class="explain" id="s3-explain"></p>
+      <p class="explain"><strong>About this demo setup.</strong> The three community trainers run on one computer for
+        convenience. Each one reads only its own community's data through AnyLog, and only model numbers are shared
+        between communities. In production, each trainer runs next to its own node.</p>
+      <div class="nav"><button class="btn secondary" data-prev>Back</button><button class="btn" data-next>Next: what it means</button></div>
+    </section>
+
+    <!-- ================= 4 ================= -->
+    <section class="step" id="s4" data-step="4">
+      <h2>What just happened</h2>
+      <div id="summary"><div class="empty">Run the training in step 3 and the results will be explained here.
+        <p><button class="btn" data-goto="3">Go to training</button></p></div></div>
+
+      <h3 style="margin-top:36px">The same pattern, with LF Energy projects</h3>
+      <p class="muted" style="max-width:70ch">Run each site's work where its data lives, and combine only results.
+        The forecaster above is a stand-in. These projects plug into the same flow:</p>
+      <div class="next">
+        <div class="panel"><h3>Forecasting and machine learning</h3><ul><li>OpenSTEF: short-term energy forecasts</li><li>EnerGNN, OpenGridFM, AINETUS</li></ul><p class="muted" style="margin:8px 0 0;font-size:.9rem">Train and run on each operator's data.</p></div>
+        <div class="panel"><h3>Grid analysis and simulation</h3><ul><li>Power Grid Model, PowSyBl, Dynawo</li><li>Grid2Op, Arras</li></ul><p class="muted" style="margin:8px 0 0;font-size:.9rem">Take aggregated load and generation from many operators as input.</p></div>
+        <div class="panel"><h3>More data sources</h3><ul><li>Live streams into each node</li><li>Other CityLearn neighborhoods (CA, TX, VT)</li></ul><p class="muted" style="margin:8px 0 0;font-size:.9rem">Coming to this demo.</p></div>
+      </div>
+      <div class="nav"><button class="btn secondary" data-prev>Back</button><button class="btn secondary" data-goto="1">Start over</button></div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || `${r.status} ${r.statusText}`);
+  return body;
+};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtInt = n => Number(n || 0).toLocaleString();
+const fmtBytes = b => b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.max(0, Math.round((b || 0) / 1e3)) + " KB";
+const nice = s => String(s).replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let CONFIG = null, NETWORK = null;
+
+/* ---------------- mode, steps, theme ---------------- */
+let current = 1;
+function show(step) {
+  current = step;
+  $$("section.step").forEach(s => s.classList.toggle("active", +s.dataset.step === step));
+  $$(".rail a").forEach(a => a.setAttribute("aria-current", +a.dataset.step === step ? "step" : "false"));
+  if (document.body.classList.contains("guided")) window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+  else $(`#s${step}`).scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
+}
+function setMode(guided) {
+  document.body.classList.toggle("guided", guided);
+  $("#mode-guided").setAttribute("aria-pressed", guided);
+  $("#mode-explore").setAttribute("aria-pressed", !guided);
+  show(current);
+}
+$("#mode-guided").onclick = () => setMode(true);
+$("#mode-explore").onclick = () => setMode(false);
+$$(".rail a").forEach(a => a.onclick = e => { e.preventDefault(); show(+a.dataset.step); });
+$$("[data-next]").forEach(b => b.onclick = () => show(Math.min(4, current + 1)));
+$$("[data-prev]").forEach(b => b.onclick = () => show(Math.max(1, current - 1)));
+document.addEventListener("click", e => { const g = e.target.closest("[data-goto]"); if (g) show(+g.dataset.goto); });
+$("#theme").onclick = () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  if (LAST_RESULTS.length) drawChart();
+};
+
+/* ---------------- step 1: the network ---------------- */
+async function loadNetwork() {
+  const st = $("#s1-status");
+  try {
+    NETWORK = await api("/api/network");
+  } catch (e) {
+    st.className = "status err";
+    st.textContent = `Couldn't reach the AnyLog network: ${e.message}. Check that the nodes are running and that configs.yaml points at one of them.`;
+    return;
+  }
+  const total = NETWORK.sites.reduce((n, s) => n + s.assets.length, 0);
+  $("#s1-assets").textContent = `${total} buildings`;
+  st.textContent = `${NETWORK.sites.length} communities found through the network in ${NETWORK.seconds} s.`;
+  $("#sites").innerHTML = NETWORK.sites.map(s => `
+    <article class="site">
+      <h3>${esc(nice(s.site))}</h3>
+      <div class="node">Stored on node <b>${esc(s.node)}</b>${s.address ? ` at ${esc(s.address)}` : ""}</div>
+      <div class="count">${fmtInt(s.train_rows + s.test_rows)}</div>
+      <div class="count-label">hourly readings</div>
+      <div class="facts"><span>${s.assets.length} buildings</span><span>${s.rounds} weeks</span></div>
+      <div class="chips">${s.assets.map(a => `<span class="chip">${esc(nice(a))}</span>`).join("")}</div>
+    </article>`).join("");
+  fillLookup();
+  buildSettings();
+  drawDiagram();
+}
+
+/* ---------------- step 2: lookup ---------------- */
+function fillLookup() {
+  const tables = Object.keys(NETWORK.tables);
+  $("#lk-table").innerHTML = tables.map(t => `<option value="${esc(t)}">${t === NETWORK.train_table ? "Training data" : t === NETWORK.test_table ? "Test data" : esc(t)}</option>`).join("");
+  const fillSites = () => {
+    const sites = Object.keys(NETWORK.tables[$("#lk-table").value] || {});
+    $("#lk-site").innerHTML = sites.map(s => `<option value="${esc(s)}">${esc(nice(s))}</option>`).join("");
+    fillAssets();
+  };
+  const fillAssets = () => {
+    const assets = (NETWORK.tables[$("#lk-table").value] || {})[$("#lk-site").value] || [];
+    $("#lk-asset").innerHTML = `<option value="">Whole community</option>` +
+      assets.map(a => `<option value="${esc(a)}">${esc(nice(a))}</option>`).join("");
+    if (assets.length) $("#lk-asset").value = assets[0];
+  };
+  $("#lk-table").onchange = fillSites;
+  $("#lk-site").onchange = fillAssets;
+  fillSites();
+}
+
+$("#lk-go").onclick = async () => {
+  const st = $("#s2-status"), table = $("#lk-table").value, site = $("#lk-site").value, asset = $("#lk-asset").value;
+  st.className = "status"; st.innerHTML = `<span class="spinner"></span> Looking it up…`;
+  $("#trace").innerHTML = "";
+  let r;
+  try {
+    r = await api(`/api/lookup?table=${encodeURIComponent(table)}&site=${encodeURIComponent(site)}&asset=${encodeURIComponent(asset)}`);
+  } catch (e) { st.className = "status err"; st.textContent = `The lookup failed: ${e.message}`; return; }
+  st.textContent = "";
+  const what = asset ? nice(asset) : `all of ${nice(site)}`;
+  const leaf = r.leaves[0];
+  const cols = r.rows.length ? Object.keys(r.rows[0]) : [];
+  $("#trace").innerHTML = `
+    <div class="hop"><div class="dot"></div><div class="body">
+      <div class="say">You ask for ${esc(what)} by name</div>
+      <div class="path">${(asset ? leaf.path : leaf.path.slice(0, -1)).map(p => `<span>${esc(p)}</span>`).join("")}</div>
+    </div></div>
+    <div class="hop"><div class="dot"></div><div class="body">
+      <div class="say">The name points to where the readings are</div>
+      <div class="detail">${asset ? "Its entry in the shared directory says:" : `${r.leaves.length} buildings, each with an entry like this one:`}</div>
+      <dl class="kv"><dt>Database</dt><dd>${esc(leaf.object.dbms)}</dd><dt>Table</dt><dd>${esc(leaf.object.table)}</dd><dt>Filter</dt><dd><code>${esc(leaf.object.where)}</code></dd></dl>
+    </div></div>
+    <div class="hop"><div class="dot"></div><div class="body">
+      <div class="say">AnyLog turns that into a query</div>
+      <pre class="code">${esc(r.sql)}</pre>
+    </div></div>
+    <div class="hop"><div class="dot"></div><div class="body">
+      <div class="say">and the node that holds the data answers</div>
+      <div class="detail">Sent to <b>${esc(r.query_node)}</b>, answered by <b>${esc(r.node)}</b>. ${fmtInt(r.total_rows)} readings in total; the first ${r.rows.length} came back in ${r.ms} ms.</div>
+      <div class="tablewrap"><table><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+        <tbody>${r.rows.map(row => `<tr>${cols.map(c => `<td>${typeof row[c] === "number" ? +row[c].toFixed(3) : esc(row[c])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    </div></div>`;
+};
+
+/* ---------------- step 3: settings ---------------- */
+function buildSettings() {
+  const task = CONFIG.task;
+  const maxRounds = Math.max(1, Math.min(...NETWORK.sites.map(s => s.rounds || 1)));
+  const items = [{ key: "rounds", label: "Rounds of learning", min: 1, max: maxRounds, step: 1, default: maxRounds,
+                   help: "One round = one week of data. Each round, every community learns and shares once." },
+                 ...task.settings];
+  $("#settings").innerHTML = items.map(s => {
+    const v = CONFIG.training[s.key] ?? s.default;
+    return `<div class="setting"><div class="top-row"><label for="set-${s.key}">${esc(s.label)}</label><b id="val-${s.key}">${v}</b></div>
+      <input type="range" id="set-${s.key}" data-key="${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" value="${Math.min(v, s.max)}">
+      <small>${esc(s.help || "")}</small></div>`;
+  }).join("");
+  $$("#settings input").forEach(i => i.oninput = () => $(`#val-${i.dataset.key}`).textContent = i.value);
+}
+const readSettings = () => Object.fromEntries($$("#settings input").map(i => [i.dataset.key, Number(i.value)]));
+
+/* ---------------- step 3: the diagram ---------------- */
+const SVG = "http://www.w3.org/2000/svg";
+let POS = {}, CENTER = { x: 400, y: 70 };
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function drawDiagram() {
+  const svg = $("#diagram"); svg.innerHTML = "";
+  const sites = NETWORK.sites, n = sites.length, w = 800;
+  const boxW = Math.min(210, (w - 40) / n - 20);
+  sites.forEach((s, i) => { POS[s.site] = { x: 20 + (w - 40) * (i + 0.5) / n, y: 285 }; });
+  sites.forEach(s => el("path", { class: "d-wire", d: `M${POS[s.site].x},${POS[s.site].y - 55} L${CENTER.x},${CENTER.y + 34}` }, svg));
+  el("rect", { class: "d-center", id: "d-center", x: CENTER.x - 110, y: CENTER.y - 34, width: 220, height: 68, rx: 14 }, svg);
+  el("text", { class: "d-label", x: CENTER.x, y: CENTER.y - 4, "text-anchor": "middle" }, svg).textContent = "Center";
+  el("text", { class: "d-sub", x: CENTER.x, y: CENTER.y + 16, "text-anchor": "middle" }, svg).textContent = "combines what arrives";
+  sites.forEach(s => {
+    const p = POS[s.site], g = el("g", { id: `d-${s.site}` }, svg);
+    el("rect", { class: "d-box", x: p.x - boxW / 2, y: p.y - 55, width: boxW, height: 110, rx: 14 }, g);
+    el("text", { class: "d-label", x: p.x, y: p.y - 28, "text-anchor": "middle" }, g).textContent = nice(s.site);
+    el("text", { class: "d-sub", x: p.x, y: p.y - 10, "text-anchor": "middle" }, g).textContent = s.node;
+    const cols = Math.min(s.assets.length, 6);
+    s.assets.forEach((a, k) => {
+      const cx = p.x - (cols - 1) * 11 + (k % cols) * 22, cy = p.y + 16 + Math.floor(k / cols) * 20;
+      el("rect", { class: "d-data", x: cx - 7, y: cy - 7, width: 14, height: 14, rx: 3 }, g);
+    });
+  });
+}
+function siteBusy(site, on) {
+  const g = $(`#d-${CSS.escape(site)}`); if (!g) return;
+  $(".d-box", g).classList.toggle("active", on);
+  $$(".d-data", g).forEach(d => d.classList.toggle("busy", on));
+}
+function fly(from, to, ms = 700) {
+  return new Promise(done => {
+    if (reduced) return done();
+    const svg = $("#diagram"), dot = el("circle", { class: "d-packet", r: 9, cx: from.x, cy: from.y }, svg);
+    const t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      dot.setAttribute("cx", from.x + (to.x - from.x) * e); dot.setAttribute("cy", from.y + (to.y - from.y) * e);
+      if (k < 1) requestAnimationFrame(step); else { dot.remove(); done(); }
+    };
+    requestAnimationFrame(step);
+  });
+}
+const siteTop = s => ({ x: POS[s].x, y: POS[s].y - 55 }), centerBottom = () => ({ x: CENTER.x, y: CENTER.y + 34 });
+
+/* ---------------- step 3: running ---------------- */
+let POLL = null, NEXT = 0, LAST_RESULTS = [], TOTALS = { raw: 0, sent: 0 }, PLANNED = 0, SITES = {};
+$("#run-go").onclick = async () => {
+  LAST_RESULTS = []; TOTALS = { raw: 0, sent: 0 }; NEXT = 0; updateMeters(); drawChart();
+  $("#run-go").disabled = true; $("#run-stop").disabled = false;
+  $("#settings-box").open = false;
+  setRunStatus("Starting…", true);
+  try { await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(readSettings()) }); }
+  catch (e) { setRunStatus(`Couldn't start: ${e.message}`, false, true); $("#run-go").disabled = false; $("#run-stop").disabled = true; return; }
+  poll();
+};
+$("#run-stop").onclick = async () => { await api("/api/run/stop", { method: "POST" }); setRunStatus("Stopping after the current step…", true); };
+
+function setRunStatus(text, busy, err) {
+  const st = $("#s3-status");
+  st.className = "status" + (err ? " err" : "");
+  st.innerHTML = (busy ? `<span class="spinner"></span> ` : "") + esc(text);
+}
+let queue = Promise.resolve();
+async function poll() {
+  clearTimeout(POLL);
+  let r;
+  try { r = await api(`/api/run?since=${NEXT}`); } catch (e) { setRunStatus(`Lost contact with the demo server: ${e.message}`, false, true); return; }
+  NEXT = r.next;
+  r.events.forEach(ev => { queue = queue.then(() => handle(ev)); });
+  if (r.status === "running") POLL = setTimeout(poll, 500);
+  else queue.then(() => finish(r));
+}
+async function handle(ev) {
+  if (ev.type === "start") {
+    PLANNED = ev.rounds; SITES = ev.sites;
+    $("#roundline").textContent = `Round 0 of ${PLANNED}`;
+  } else if (ev.type === "site_training") {
+    $("#roundline").textContent = `Round ${ev.round} of ${PLANNED}`;
+    setRunStatus(`${nice(ev.site)} is learning from its own buildings…`, true);
+    siteBusy(ev.site, true);
+  } else if (ev.type === "site_trained") {
+    siteBusy(ev.site, false);
+    TOTALS.raw += ev.raw_bytes; TOTALS.sent += ev.sent_bytes; updateMeters();
+    setRunStatus(`${nice(ev.site)} sends its model update (${fmtBytes(ev.sent_bytes)}). Its ${fmtInt(ev.rows)} readings stay home.`, true);
+    await fly(siteTop(ev.site), centerBottom());
+  } else if (ev.type === "combined") {
+    setRunStatus("The center combines the updates and sends the result back to everyone…", true);
+    const c = $("#d-center"); c.classList.remove("pulse"); void c.getBBox(); c.classList.add("pulse");
+    TOTALS.sent += ev.sent_back_bytes * Object.keys(POS).length; updateMeters();
+    await Promise.all(Object.keys(POS).map(s => fly(centerBottom(), siteTop(s))));
+  } else if (ev.type === "round") {
+    LAST_RESULTS.push(ev); drawChart(); renderSummary();
+    setRunStatus(`Round ${ev.round} scored on each community's held-back week.`, true);
+  } else if (ev.type === "error") {
+    setRunStatus(`The run stopped with an error: ${ev.message}`, false, true);
+  }
+}
+function finish(r) {
+  $("#run-go").disabled = false; $("#run-stop").disabled = true;
+  if (r.status === "done") { setRunStatus("Done. See step 4 for what it means.", false); $("#roundline").textContent = `All ${PLANNED} rounds complete`; $('.rail a[data-step="3"]').classList.add("done"); }
+  else if (r.status === "stopped") setRunStatus(`Stopped after round ${LAST_RESULTS.length}.`, false);
+  else if (r.status === "error") setRunStatus(`The run stopped with an error: ${r.error}`, false, true);
+  $$(".d-box").forEach(b => b.classList.remove("active")); $$(".d-data").forEach(b => b.classList.remove("busy"));
+  renderSummary();
+}
+function updateMeters() {
+  $("#m-raw").textContent = fmtBytes(TOTALS.raw); $("#m-sent").textContent = fmtBytes(TOTALS.sent);
+  const max = Math.max(TOTALS.raw, TOTALS.sent, 1);
+  $("#b-raw").style.width = (100 * TOTALS.raw / max) + "%"; $("#b-sent").style.width = (100 * TOTALS.sent / max) + "%";
+}
+
+/* ---------------- step 3: the chart (small multiples, one shared scale) ---------------- */
+const SERIES = [
+  { key: "federated", color: "var(--shared)", dash: "" },
+  { key: "local", color: "var(--local)", dash: "" },
+  { key: "baseline", color: "var(--neutral)", dash: "5 4" },
+];
+function seriesLabel(k) { return (CONFIG.task.series || {})[k] || nice(k); }
+function value(scores, k) { const s = scores?.[k]; return s ? s[CONFIG.task.metric] : null; }
+function drawChart() {
+  const box = $("#multiples");
+  if (!LAST_RESULTS.length) { box.innerHTML = `<div class="empty">Start training to see each community's results appear round by round.</div>`; $("#toggle-table").hidden = true; return; }
+  const sites = Object.keys(LAST_RESULTS[0].scores);
+  const all = LAST_RESULTS.flatMap(r => sites.flatMap(s => SERIES.map(x => value(r.scores[s], x.key)))).filter(v => v != null);
+  const yMax = niceMax(Math.max(...all)), yMin = 0;
+  const n = Math.max(PLANNED, LAST_RESULTS.length);
+  const W = 300, H = 170, L = 36, R = 10, T = 10, B = 26;
+  const x = i => L + (n === 1 ? (W - L - R) / 2 : (W - L - R) * (i - 1) / (n - 1));
+  const y = v => T + (H - T - B) * (1 - (v - yMin) / (yMax - yMin));
+  const ticks = [0, yMax / 2, yMax];
+  box.innerHTML = sites.map(s => {
+    let g = `<g class="axis">${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${+t.toFixed(2)}</text>`).join("")}`;
+    for (let i = 1; i <= n; i++) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${i}</text>`;
+    g += `</g>`;
+    SERIES.forEach(sr => {
+      const pts = LAST_RESULTS.map(r => [x(r.round), value(r.scores[s], sr.key)]).filter(p => p[1] != null).map(p => [p[0], y(p[1])]);
+      if (!pts.length) return;
+      g += `<polyline fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${sr.dash ? `stroke-dasharray="${sr.dash}"` : ""} points="${pts.map(p => p.join(",")).join(" ")}"/>`;
+      if (sr.key !== "baseline") g += pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="${sr.color}" stroke="var(--panel)" stroke-width="2"/>`).join("");
+    });
+    g += `<line class="cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--ink-3)" stroke-width="1" visibility="hidden"/>`;
+    g += `<rect class="hit" x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/>`;
+    return `<div class="mult" data-site="${esc(s)}"><h4>${esc(nice(s))}</h4>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(CONFIG.task.metric_label)} per round for ${esc(nice(s))}">${g}</svg><div class="tip"></div></div>`;
+  }).join("");
+  $$(".mult").forEach(m => {
+    const svg = $("svg", m), tip = $(".tip", m), cross = $(".cross", m), site = m.dataset.site;
+    const move = ev => {
+      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      let best = LAST_RESULTS[0];
+      LAST_RESULTS.forEach(r => { if (Math.abs(x(r.round) - p.x) < Math.abs(x(best.round) - p.x)) best = r; });
+      cross.setAttribute("x1", x(best.round)); cross.setAttribute("x2", x(best.round)); cross.setAttribute("visibility", "visible");
+      tip.innerHTML = `<b>Round ${best.round}</b><br>` + SERIES.map(sr => {
+        const v = value(best.scores[site], sr.key); return v == null ? "" : `<span class="ln" style="border-color:${sr.color};${sr.dash ? "border-top-style:dashed" : ""}"></span>${esc(seriesLabel(sr.key))}: ${v}<br>`;
+      }).join("");
+      const r = m.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+      tip.style.left = (sr.left - r.left + x(best.round) / W * sr.width) + "px";
+      tip.style.top = (sr.top - r.top + 8) + "px"; tip.style.display = "block";
+    };
+    $(".hit", m).addEventListener("pointermove", move);
+    $(".hit", m).addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+  });
+  $("#legend").innerHTML = SERIES.map(sr => `<span><i class="ln" style="border-color:${sr.color};${sr.dash ? "border-top-style:dashed" : ""}"></i>${esc(seriesLabel(sr.key))}</span>`).join("");
+  $("#toggle-table").hidden = false;
+  renderTable(sites);
+}
+function niceMax(v) { if (!(v > 0)) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p * 2) / 2 * p; }
+function renderTable(sites) {
+  const head = `<tr><th>Round</th><th>Community</th>${SERIES.map(s => `<th>${esc(seriesLabel(s.key))}</th>`).join("")}</tr>`;
+  const body = LAST_RESULTS.flatMap(r => sites.map(s => `<tr><td>${r.round}</td><td>${esc(nice(s))}</td>${SERIES.map(sr => `<td>${value(r.scores[s], sr.key) ?? "–"}</td>`).join("")}</tr>`)).join("");
+  $("#score-table").innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+$("#toggle-table").onclick = () => {
+  const t = $("#score-table"); t.hidden = !t.hidden;
+  $("#toggle-table").textContent = t.hidden ? "Show the numbers" : "Hide the numbers";
+};
+
+/* ---------------- step 4: summary ---------------- */
+function renderSummary() {
+  if (!LAST_RESULTS.length) return;
+  const last = LAST_RESULTS[LAST_RESULTS.length - 1], task = CONFIG.task;
+  const better = (a, b) => task.lower_is_better ? a < b : a > b;
+  const pct = (a, b) => Math.round(100 * Math.abs(b - a) / b);
+  const sites = Object.keys(last.scores);
+  const rows = sites.map(s => {
+    const f = value(last.scores[s], "federated"), l = value(last.scores[s], "local"), b = value(last.scores[s], "baseline");
+    const vsGuess = b == null ? "" : better(f, b)
+      ? `${pct(f, b)}% better than the simple guess`
+      : `${pct(f, b)}% worse than the simple guess`;
+    const vsAlone = better(f, l) ? `and ${pct(f, l)}% better than learning alone.` : better(l, f) ? `though learning alone was ${pct(l, f)}% better here.` : "and the same as learning alone.";
+    return { s, f, l, b, text: `Learned together, its forecasts were ${vsGuess}, ${vsAlone}` };
+  });
+  const wins = rows.filter(r => better(r.f, r.l)).length;
+  const ratio = TOTALS.raw ? Math.max(1, Math.round(TOTALS.raw / Math.max(TOTALS.sent, 1))) : 0;
+  $("#summary").innerHTML = `
+    <p class="lede">After ${last.round} round${last.round > 1 ? "s" : ""} of learning, each community's ${esc(task.title.toLowerCase())}
+      was scored on its own data that had been held back from learning.</p>
+    <div class="headline">
+      <div class="panel"><div class="big">${wins} of ${rows.length}</div><p>communities did better by learning together than alone.</p></div>
+      <div class="panel"><div class="big">${fmtBytes(TOTALS.sent)}</div><p>of model numbers were shared between communities. Each community's trainer kept its own building readings to itself: ${fmtBytes(TOTALS.raw)} in all${ratio > 1 ? `, about ${ratio}× more than what was shared` : ""}.</p></div>
+    </div>
+    <div class="verdicts">${rows.map(r => `<div class="verdict"><div class="who">${esc(nice(r.s))}</div><div>${esc(r.text)}</div></div>`).join("")}</div>
+    <p class="explain">${last.round < 20 ? `<strong>Why "alone" can win early on:</strong> with only a few weeks of data, a community's own patterns are easy to learn, and a shared model is still a compromise between different neighborhoods. Sharing tends to pay off with more weeks, more communities, or communities that have little data of their own.` : `<strong>Reading the result:</strong> sharing pays off most for communities whose own data is thin or unusual; communities with lots of typical data gain less.`}</p>`;
+}
+
+/* ---------------- start ---------------- */
+(async () => {
+  try { CONFIG = await api("/api/config"); }
+  catch (e) { $("#s1-status").className = "status err"; $("#s1-status").textContent = `The demo server isn't configured: ${e.message}`; return; }
+  const t = CONFIG.task;
+  $("#s3-title").textContent = t.title ? `${t.title}: learn from everyone's data without pooling it` : $("#s3-title").textContent;
+  $("#s3-lede").textContent = t.summary;
+  $("#s3-explain").innerHTML = `<strong>How it works.</strong> ${esc(t.local_step)} ${esc(t.combine_step)} <strong>What travels:</strong> ${esc(t.travels)}`;
+  $("#chart-title").textContent = t.metric_label || "Score per community";
+  $("#chart-sub").textContent = `${t.lower_is_better ? "Lower" : "Higher"} is better. One point per round; every community is scored on its own held-back data.`;
+  show(1);
+  loadNetwork();
+  // pick up a run already in progress (e.g. after a page reload)
+  const r = await api("/api/run?since=0").catch(() => null);
+  if (r && r.status === "running") { $("#run-go").disabled = true; $("#run-stop").disabled = false; poll(); }
+})();
+</script>
+</body>
+</html>
