@@ -20,11 +20,11 @@ def main():
     if not operators:
         raise SystemExit(f"No operators defined in {args.config}")
 
-    # for operator in operators:
-    #     publish_policy(conn=operator.get("host"), db_name=content.get("publish").get("dbms"))
-    #     run_msg_client(conn=operator.get("host"))
-    #
-    # data_gen(operators=operators, configs=content)
+    for operator in operators:
+        publish_policy(conn=operator.get("host"), db_name=content.get("publish").get("dbms"))
+        run_msg_client(conn=operator.get("host"))
+
+    data_gen(operators=operators, configs=content)
 
     # query node provided in configs great. else use the first operator in the list as query node
     data = check_data(conn=content.get("query") if content.get("query") else operators[0].get("host"),
