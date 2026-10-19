@@ -6,3 +6,4 @@ numpy>=0.0
 torch>=0.0
 fastapi>=0.0
 uvicorn>=0.0
+openstef>=0.0

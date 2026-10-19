@@ -24,7 +24,7 @@ class Client:
         self.site, self.task, self.conn = site, task, conn
         self.train_leaves, self.test_leaves = train_leaves, test_leaves
         self.history_rounds = history_rounds
-        self._test_rows = None
+        self._test_rows, self._test_window = None, None
         self.last_rows_bytes = 0  # size of the raw rows read in the last train() call
 
     @property
@@ -48,10 +48,15 @@ class Client:
         self.last_rows_bytes = len(json.dumps(rows))
         return {name: self.task.train(state, rows) for name, state in states.items()}, len(rows)
 
-    def evaluate(self, states):
-        """Score every state, plus the task's baseline, on this site's test rows (all rounds)."""
-        if self._test_rows is None:  # fixed test set: fetched once, so rounds stay comparable
-            self._test_rows = fetch(self.conn, self.test_leaves, self.task.columns)
+    def evaluate(self, states, first_round=1, last_round=None):
+        """Score every state, plus the task's baseline, on this site's test rows for rounds
+        first_round..last_round. The rows are fetched once per window, so every round of a run is
+        scored on the same rows and the scores stay comparable."""
+        window = (int(first_round), last_round)
+        if self._test_rows is None or self._test_window != window:
+            where = f"round_number >= {window[0]}" + (f" AND round_number <= {int(last_round)}" if last_round else "")
+            self._test_rows = fetch(self.conn, self.test_leaves, self.task.columns, where)
+            self._test_window = window
         scores = {name: self.task.evaluate(state, self._test_rows) for name, state in states.items()}
         baseline = self.task.baseline(self._test_rows)
         if baseline:

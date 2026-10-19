@@ -93,6 +93,7 @@ class LoadForecastTask(Task):
     series = {
         "federated": "Learned together",
         "local": "Learned alone",
+        "fresh": "Learned together, from scratch",
         "baseline": "Simple guess (next hour = this hour)",
     }
     settings = [

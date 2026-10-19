@@ -60,7 +60,7 @@ class Run:
             event["t"] = round(time.time(), 2)
             self.events.append(event)
 
-    def start(self, conn, cfg, results_file):
+    def start(self, conn, cfg, results_file, model_file=None):
         with self.lock:
             if self.status == "running":
                 raise HTTPException(409, "A run is already in progress")
@@ -69,7 +69,8 @@ class Run:
 
         def work():
             try:
-                result = run_training(conn, cfg, results_file, on_event=self.add, stop=self.stop)
+                result = run_training(conn, cfg, results_file, on_event=self.add, stop=self.stop,
+                                      model_file=model_file)
                 self.status = result["status"]
             except BaseException as error:  # SystemExit from config problems too
                 self.error, self.status = str(error) or error.__class__.__name__, "error"
@@ -161,7 +162,8 @@ def start_run(settings: dict = Body(default={})):
     allowed = {s["key"] for s in task.settings} | {"rounds", "history_rounds", "seed"}
     cfg = dict(training, **{k: v for k, v in settings.items() if k in allowed and v not in (None, "")})
     results_file = os.path.join(REPO, training.get("results", "results/fl_results.json"))
-    RUN.start(query_node, cfg, results_file)
+    model_file = os.path.join(REPO, training.get("model", "results/fl_model.pkl"))
+    RUN.start(query_node, cfg, results_file, model_file)
     return {"status": "running", "config": cfg}
 
 
