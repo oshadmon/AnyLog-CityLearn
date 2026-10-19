@@ -8,10 +8,10 @@ operators:
   - host: 172.23.160.85:32049
     community_id: [community_a]
     # buildings: [Building_1, Building_2, Building_3, Building_4, Building_5, Building_6]
-#  - host: 172.23.160.85:32149
-#    community_id: community_b
-#  - host: 172.23.160.85:32159
-#    community_id: community_c
+  - host: 172.23.160.85:32149
+    community_id: community_b
+  - host: 172.23.160.85:32159
+    community_id: community_c
 
 simulation:
   schema: citylearn_challenge_2022_phase_all_plus_evs
