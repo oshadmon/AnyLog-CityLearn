@@ -44,9 +44,17 @@ from fl_openstef.describe import TASK as OPENSTEF_TASK  # noqa: E402  (text only
 CONFIG_FILE = os.environ.get("CITYLEARN_CONFIG", pipeline.CONFIG_FILE)
 
 
-def settings():
+TRAINING_TYPES = {"fl": "PyTorch, federated", "openstef": "OpenSTEF"}
+
+
+def settings(training_type=None):
+    """The config, with training_type switched when the page picked another model (the config's is the default)."""
     try:
-        return pipeline.load_settings(CONFIG_FILE)
+        s = pipeline.load_settings(CONFIG_FILE)
+        s["default_training_type"] = s["training_type"]
+        if training_type in TRAINING_TYPES:
+            s["training_type"] = training_type
+        return s
     except SystemExit as error:
         raise HTTPException(500, str(error))
 
@@ -147,8 +155,8 @@ def live_work(emit, stop, interval):
                           on_step=throttled(emit, 1 if interval >= 1 else 6))
 
 
-def train_work(emit, stop, cfg, resume):
-    s = settings()
+def train_work(emit, stop, cfg, resume, training_type=None):
+    s = settings(training_type)
     if s["training_type"] == "openstef":
         return openstef_work(emit, stop, s, resume)
     live = JOBS["live"].running()
@@ -182,6 +190,10 @@ def live_progress(steps_per_round):
 def openstef_work(emit, stop, s, resume):
     """Run fl_openstef/job.py with the OpenSTEF venv's python and pass its events on."""
     python = s["openstef_python"]
+    problem = pipeline.openstef_problem(python)
+    if problem and problem.startswith("packages:"):
+        raise RuntimeError(f"{python} is missing {problem.split(':')[1].replace(',', ' and ')}: "
+                           f"run `\"{python}\" -m pip install xgboost` (OpenSTEF imports XGBoost for every model type)")
     if not python or not os.path.isfile(python):
         raise RuntimeError("OpenSTEF runs in its own venv. Set openstef.python in configs.yaml to that venv's python "
                            r"(for example C:\...\AnyLog-CityLearn\venv-openstef\Scripts\python.exe)"
@@ -257,8 +269,8 @@ def openstef_task(s):
 # ---------- endpoints ----------
 
 @app.get("/api/config")
-def config():
-    s = settings()
+def config(type: str | None = None):
+    s = settings(type)
     training, content = s["training"], s["content"]
     if s["training_type"] == "openstef":
         done = openstef_results(s) or {}
@@ -270,7 +282,11 @@ def config():
         saved = load_model(s["model_file"])
         task = task_for(training).describe()
     return {"query_node": s["query_node"], "uns_root": training.get("uns_root", "citylearn_demo"),
-            "training_type": s["training_type"], "openstef_ready": bool(s["openstef_python"]),
+            "training_type": s["training_type"], "default_training_type": s["default_training_type"],
+            "training_types": TRAINING_TYPES,
+            "openstef_ready": not pipeline.openstef_problem(s["openstef_python"]),
+            "openstef_problem": pipeline.openstef_problem(s["openstef_python"]),
+            "openstef_python": s["openstef_python"],
             "training": training, "task": task,
             "simulation": {"steps": int((content.get("simulation") or {}).get("steps", 24)),
                            "schema": (content.get("simulation") or {}).get("schema")},
@@ -346,6 +362,15 @@ def openstef_results_view():
     return results
 
 
+@app.get("/api/fl/results")
+def fl_results_view():
+    path = settings()["results_file"]
+    if not os.path.isfile(path):
+        raise HTTPException(404, "No federated results yet")
+    with open(path) as f:
+        return _clean(json.load(f))
+
+
 @app.get("/api/openstef/query")
 def openstef_query(site: str):
     """The hourly query OpenSTEF's forecast for `site` used (its last week's window), as AnyLog receives it."""
@@ -364,6 +389,54 @@ def openstef_query(site: str):
     command = build_query(tables, primary=cfg.get("train_table") or "building_obs_train", start=start, end=end,
                           increments_unit=1, increments_type="hour", aggregates=cfg.get("aggregates"))
     return {"site": site, "command": command, "objects": tables, "query_node": s["query_node"]}
+
+
+def _mean(values):
+    values = [v for v in values if v is not None]
+    return sum(values) / len(values) if values else None
+
+
+def compare_models(s):
+    """Each model's latest results, reduced to what can be compared fairly: how much it beats its own simple guess.
+    (The two forecast different things, so their kWh errors can't be compared directly.)"""
+    out = {}
+    if os.path.isfile(s["results_file"]):
+        with open(s["results_file"]) as f:
+            fl = _clean(json.load(f))
+        if fl.get("rounds"):
+            last = fl["rounds"][-1]  # scores of the latest model, on every week's held-back rows
+            pairs = [(v.get("federated", {}).get("mae_kwh"), v.get("baseline", {}).get("mae_kwh"))
+                     for v in last["scores"].values()]
+            pairs = [(m, b) for m, b in pairs if m is not None and b]
+            if pairs:
+                model, guess = _mean([m for m, _ in pairs]), _mean([b for _, b in pairs])
+                out["fl"] = {"label": TRAINING_TYPES["fl"],
+                             "forecasts": "each building's use one hour ahead",
+                             "guess": "the next hour equals this hour",
+                             "unit": "kWh per building-hour", "error": round(model, 3), "guess_error": round(guess, 3),
+                             "gain_pct": round(100 * (1 - model / guess)),
+                             "wins": sum(m < b for m, b in pairs), "of": len(pairs), "of_what": "communities",
+                             "weeks": last["round"]}
+    done = openstef_results(s)
+    if done and done.get("rounds"):
+        pairs = [(v["openstef"].get("mae_kwh"), v["baseline"].get("mae_kwh"))
+                 for e in done["rounds"] for v in (e.get("scores") or {}).values()]
+        pairs = [(m, b) for m, b in pairs if m is not None and b]
+        if pairs:
+            model, guess = _mean([m for m, _ in pairs]), _mean([b for _, b in pairs])
+            out["openstef"] = {"label": TRAINING_TYPES["openstef"],
+                               "forecasts": "each community's total use, up to a day and a half ahead",
+                               "guess": "each hour repeats the same hour last week",
+                               "unit": "kWh per community-hour", "error": round(model, 3), "guess_error": round(guess, 3),
+                               "gain_pct": round(100 * (1 - model / guess)),
+                               "wins": sum(m < b for m, b in pairs), "of": len(pairs), "of_what": "community-weeks",
+                               "weeks": max(e["round"] for e in done["rounds"])}
+    return out
+
+
+@app.get("/api/compare")
+def compare():
+    return compare_models(settings())
 
 
 @app.get("/api/status")
@@ -405,8 +478,9 @@ def start_train(body: dict = Body(default={})):
     allowed = {s["key"] for s in task.settings} | {"rounds", "history_rounds", "seed"}
     cfg = dict(training, **{k: v for k, v in body.items() if k in allowed and v not in (None, "")})
     resume = bool(body.get("resume"))
-    JOBS["train"].start(lambda emit, stop: train_work(emit, stop, cfg, resume), resume=resume)
-    return {"status": "running", "config": cfg, "resume": resume}
+    kind = body.get("type") if body.get("type") in TRAINING_TYPES else settings()["training_type"]
+    JOBS["train"].start(lambda emit, stop: train_work(emit, stop, cfg, resume, kind), resume=resume, type=kind)
+    return {"status": "running", "config": cfg, "resume": resume, "type": kind}
 
 
 @app.get("/api/jobs/{name}")

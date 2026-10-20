@@ -62,6 +62,9 @@ def forecast_window(conn, pj, tables, window, settings, n_assets, train_table, t
                         end=start.strftime(FMT), aggregates=settings.get("aggregates"))
     train_frame, train_report = fc.to_frame(rows, n_assets)
     hours = int(train_frame["load"].notna().sum()) if len(train_frame) else 0
+    if hours == 0 and train_report["incomplete_hours"]:
+        return {"skipped": f"no usable hours: {train_report['incomplete_hours']} hours don't have exactly one reading "
+                           f"per building ({n_assets}); the history may have been loaded more than once"}
     if hours < int(settings["min_train_days"]) * 24:
         return {"skipped": f"only {hours} hours of history (need {int(settings['min_train_days']) * 24})"}
     model, specs = fc.train(pj, train_frame)

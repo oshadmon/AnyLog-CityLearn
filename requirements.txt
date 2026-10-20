@@ -8,3 +8,4 @@ fastapi>=0.0
 uvicorn>=0.0
 openstef>=0.0
 pyyaml>=0.0
+xgboost>=0.0

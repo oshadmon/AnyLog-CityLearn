@@ -62,9 +62,10 @@ on the operators themselves or on separate nodes.
 
 - An AnyLog network with one operator per community (3 here), and REST access to at least one node
 - Python 3.11 or 3.12
-- Two virtual environments, because CityLearn needs numpy < 2 and OpenSTEF needs numpy 2:
-  - `venv`: `requirements.txt` (CityLearn, PyTorch, the GUI). PyTorch is a large download.
-  - `venv-openstef`: `requirements-openstef.txt` (only needed for OpenSTEF)
+- `venv`: `requirements.txt` (CityLearn, PyTorch, the GUI). PyTorch is a large download.
+- For OpenSTEF, either install `requirements-openstef.txt` into the same `venv` (works when CityLearn
+  runs on numpy 2, as CityLearn 3.0.2 does in practice), or into a separate `venv-openstef`
+  (CityLearn 3.0.2 asks for numpy < 2, OpenSTEF needs numpy 2). The GUI finds either one.
 
 ## Steps
 

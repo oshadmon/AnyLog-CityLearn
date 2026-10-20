@@ -223,6 +223,14 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
 .tip .ln { display: inline-block; width: 14px; border-top: 2px solid; vertical-align: 3px; margin-right: 6px; }
 .empty { border: 1.5px dashed var(--line); border-radius: var(--radius-lg); padding: 28px; text-align: center; color: var(--ink-2); }
 
+/* ---------- step 3: model picker ---------- */
+.model-pick { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: -8px 0 22px; }
+.model-pick .lbl { font-weight: 650; }
+.model-pick small { color: var(--ink-3); font-size: 0.85rem; }
+.seg button:disabled { cursor: not-allowed; opacity: 0.5; }
+.notice { border: 1px solid color-mix(in srgb, var(--local) 45%, var(--line)); background: var(--local-soft); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.92rem; margin: 0 0 18px; }
+.notice code { background: var(--panel); padding: 1px 4px; border-radius: 4px; }
+
 /* ---------- step 3: OpenSTEF forecast view ---------- */
 .fc-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin: 28px 0 10px; }
 .fc-head .controls { margin: 0; }
@@ -355,6 +363,15 @@ details.expert .kv { font-size: 0.86rem; }
     <section class="step" id="s3" data-step="3">
       <h2 id="s3-title">Learn from everyone's data without pooling it</h2>
       <p class="lede" id="s3-lede"></p>
+      <div class="model-pick">
+        <span class="lbl">Model</span>
+        <div class="seg" role="group" aria-label="Which model to run" id="model-seg"></div>
+        <small id="model-note"></small>
+      </div>
+      <div class="notice" id="ostef-missing" hidden>OpenSTEF isn't set up on this computer yet. It needs its own Python
+        environment: in the repo folder run <code>python -m venv venv-openstef</code>, then
+        <code>venv-openstef\Scripts\pip install -r requirements-openstef.txt</code>, and reload this page. If the
+        environment lives elsewhere, set <code>openstef.python</code> in configs.yaml to its python.</div>
 
       <div class="train-grid">
         <div>
@@ -440,6 +457,9 @@ details.expert .kv { font-size: 0.86rem; }
       <div id="summary"><div class="empty">Run the training in step 3 and the results will be explained here.
         <p><button class="btn" data-goto="3">Go to training</button></p></div></div>
 
+      <h3 style="margin-top:36px">Comparing the models</h3>
+      <div id="compare"></div>
+
       <h3 style="margin-top:36px">The same pattern, with LF Energy projects</h3>
       <p class="muted" style="max-width:70ch" id="s4-projects">Run each site's work where its data lives, and combine only results.
         The forecaster above is a stand-in. These projects plug into the same flow:</p>
@@ -471,6 +491,23 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let CONFIG = null, NETWORK = null;
 let OSTEF = false;   // training_type: openstef -> forecasts instead of federated learning
+const PICKED = new URLSearchParams(location.search).get("model");  // the viewer's choice; else configs.yaml decides
+const configUrl = () => "/api/config" + (PICKED ? `?type=${encodeURIComponent(PICKED)}` : "");
+function pickModel(type) {
+  const url = new URL(location.href);
+  if (type === CONFIG.default_training_type) url.searchParams.delete("model"); else url.searchParams.set("model", type);
+  url.hash = "s3";
+  location.href = url.toString();
+}
+function buildModelPicker() {
+  $("#model-seg").innerHTML = Object.entries(CONFIG.training_types).map(([k, label]) =>
+    `<button data-type="${esc(k)}" aria-pressed="${k === CONFIG.training_type}">${esc(label)}</button>`).join("");
+  $$("#model-seg button").forEach(b => b.onclick = () => { if (b.dataset.type !== CONFIG.training_type) pickModel(b.dataset.type); });
+  const other = Object.keys(CONFIG.training_types).find(k => k !== CONFIG.training_type);
+  $("#model-note").textContent = `Default from configs.yaml: ${CONFIG.training_types[CONFIG.default_training_type]}.` +
+    ` Switch to ${CONFIG.training_types[other]} to compare; each keeps its own results.`;
+  $("#ostef-missing").hidden = !(OSTEF && !CONFIG.openstef_ready);
+}
 let FC = {};         // OpenSTEF: week -> {window: {site: [start, end]}, forecasts: {site: [hour rows]}, skipped}
 
 /* ---------------- mode, steps, theme ---------------- */
@@ -687,7 +724,8 @@ function syncButtons() {
   $("#live-go").disabled = isOn("live") || isOn("insert");
   $("#live-stop").disabled = JOB.live !== "running";
   $("#live-speed").disabled = isOn("live");
-  $("#run-go").disabled = isOn("train") || isOn("insert");
+  $("#run-go").disabled = isOn("train") || isOn("insert") || (OSTEF && CONFIG && !CONFIG.openstef_ready);
+  $$("#model-seg button").forEach(b => b.disabled = isOn("train"));
   $("#run-stop").disabled = JOB.train !== "running";
 }
 function setStatus(sel, text, busy, err) {
@@ -789,7 +827,7 @@ $("#run-go").onclick = async () => {
   if (!(OSTEF && resume)) { LAST_RESULTS = []; FC = {}; FIRST = 1; drawChart(); if (OSTEF) { fillWeeks(); drawForecast(); renderExpert(); } }
   $("#settings-box").open = false;
   setRunStatus(OSTEF ? "Starting OpenSTEF in its own Python environment…" : "Starting…", true);
-  try { await startJob("train", { ...(OSTEF ? {} : readSettings()), resume }); }
+  try { await startJob("train", { ...(OSTEF ? {} : readSettings()), resume, type: CONFIG.training_type }); }
   catch (e) { setRunStatus(`Couldn't start: ${e.message}`, false, true); return; }
   watchTrain(0);
 };
@@ -859,9 +897,10 @@ async function finish(r) {
   renderSummary();
   await refreshSaved();
   if (OSTEF) await loadOpenstef();
+  renderCompare();
 }
 async function refreshSaved() {
-  try { CONFIG = { ...CONFIG, ...(await api("/api/config")) }; } catch (e) { return; }
+  try { CONFIG = { ...CONFIG, ...(await api(configUrl())) }; } catch (e) { return; }
   const saved = CONFIG.saved_model;
   $("#resume-wrap").hidden = !saved;
   if (saved && OSTEF) $("#resume-sub").textContent = `Weeks up to ${saved.last_round} are done (${saved.weeks} forecast; the rest had too little history). Untick to forecast every week again.`;
@@ -1178,6 +1217,45 @@ function renderSummaryOpenstef() {
       and returned only those totals. The same query works for any community, on any node, as new ones join.</p>`;
 }
 
+/* the federated model's last results, so they show after a reload or after switching models */
+async function loadFl() {
+  let r;
+  try { r = await api("/api/fl/results"); } catch (e) { return; }
+  if (isOn("train") || !(r.rounds || []).length) return;
+  LAST_RESULTS = r.rounds; FIRST = r.rounds[0].round; PLANNED = r.rounds[r.rounds.length - 1].round;
+  RESUMED = r.rounds.some(e => e.resumed);
+  TOTALS = { raw: 0, sent: 0 };
+  for (const e of r.rounds) for (const t of Object.values(e.traffic || {})) { TOTALS.raw += t.raw_bytes || 0; TOTALS.sent += 2 * (t.sent_bytes || 0); }
+  updateMeters(); drawChart(); renderSummary();
+  $("#roundline").textContent = `Last run: ${weekRange(FIRST, PLANNED)}`;
+}
+
+/* ---------------- step 4: the two models side by side ---------------- */
+async function renderCompare() {
+  let c;
+  try { c = await api("/api/compare"); } catch (e) { return; }
+  const kinds = Object.keys(CONFIG.training_types);
+  const missing = kinds.filter(k => !c[k]);
+  const card = k => {
+    const m = c[k];
+    if (!m) return `<div class="panel"><h3>${esc(CONFIG.training_types[k])}</h3><p class="muted" style="margin:8px 0 0">No results yet.
+      ${k === CONFIG.training_type ? "Run it in step 3." : `Pick it in step 3 and run it to compare.`}</p></div>`;
+    const better = m.gain_pct > 0;
+    return `<div class="panel"><h3>${esc(m.label)}</h3>
+      <div class="big" style="margin-top:10px">${better ? m.gain_pct + "%" : "–"}</div>
+      <p>${better ? "better than its simple guess" : `behind its simple guess (${-m.gain_pct}%)`}, better in ${m.wins} of ${m.of} ${esc(m.of_what)}.</p>
+      <p class="muted" style="font-size:.88rem">Forecasts ${esc(m.forecasts)}. Average error ${fmtKwh(m.error)} ${esc(m.unit)}, against
+        ${fmtKwh(m.guess_error)} for the simple guess (${esc(m.guess)}). Data up to week ${m.weeks}.</p></div>`;
+  };
+  $("#compare").innerHTML = `<div class="headline">${kinds.map(card).join("")}</div>
+    <p class="explain"><strong>How to compare them.</strong> The two models answer different questions: one forecasts a
+      single building an hour ahead, the other a whole community a day and a half ahead. A bigger question has bigger
+      errors, so their kWh can't be compared directly. What can be compared is how much each beats the simple guess
+      for its own question.${missing.length ? ` Run ${missing.map(k => CONFIG.training_types[k]).join(" and ")} to see both.` : ""}
+      Either way, both read the same data the same way: by name through the UNS, with the readings staying on each
+      community's node.</p>`;
+}
+
 /* ---------------- step 4: summary ---------------- */
 function renderSummary() {
   if (OSTEF) return renderSummaryOpenstef();
@@ -1213,10 +1291,11 @@ function renderSummary() {
 
 /* ---------------- start ---------------- */
 (async () => {
-  try { CONFIG = await api("/api/config"); }
+  try { CONFIG = await api(configUrl()); }
   catch (e) { $("#s1-status").className = "status err"; $("#s1-status").textContent = `The demo server isn't configured: ${e.message}`; return; }
   const t = CONFIG.task;
   OSTEF = CONFIG.training_type === "openstef";
+  buildModelPicker();
   if (OSTEF) setupOpenstef(t); else {
   $("#s3-title").textContent = t.title ? `${t.title}: learn from everyone's data without pooling it` : $("#s3-title").textContent;
   $("#s3-lede").textContent = t.summary;
@@ -1230,13 +1309,17 @@ function renderSummary() {
   if (![...speed.options].some(o => Number(o.value) === CONFIG.live_interval)) speed.add(new Option(`One hour every ${CONFIG.live_interval} seconds`, CONFIG.live_interval));
   speed.value = String(CONFIG.live_interval);
   await refreshSaved();
-  show(1);
+  show(location.hash === "#s3" ? 3 : 1);
   syncButtons();
   await loadNetwork();
-  if (OSTEF) await loadOpenstef();
+  if (OSTEF) await loadOpenstef(); else await loadFl();
+  renderCompare();
   // pick up jobs already running (e.g. after a page reload)
   const st = await api("/api/status").catch(() => null);
   if (st) {
+    // a run of the other model is in progress (started before a reload or from another tab): show that model
+    const running = st.train && ["running", "stopping"].includes(st.train.status) ? st.train.info.type : null;
+    if (running && running !== CONFIG.training_type) { pickModel(running); return; }
     for (const name of Object.keys(JOB)) JOB[name] = st[name].status;
     syncButtons();
     if (isOn("insert")) watchInsert(0);

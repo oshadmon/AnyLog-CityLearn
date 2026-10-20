@@ -9,7 +9,9 @@ The demo's data actions, shared by the command line (main.py) and the GUI (web/a
 Training itself is fl.server.run_training.
 """
 import copy
+import importlib.util
 import os
+import sys
 
 import rest
 import support
@@ -53,11 +55,29 @@ def load_settings(config_file=CONFIG_FILE):
 
 
 def _default_openstef_python():
-    """The OpenSTEF venv's python, if it sits in the repo as venv-openstef (as the README sets it up)."""
+    """
+    The python that runs OpenSTEF, when openstef.python isn't set:
+      1. venv-openstef in the repo (the two-venv setup from the README), else
+      2. this python, if OpenSTEF is installed next to CityLearn (one venv works when CityLearn runs on numpy 2)
+    """
     for path in (os.path.join(REPO, "venv-openstef", "Scripts", "python.exe"),
                  os.path.join(REPO, "venv-openstef", "bin", "python")):
         if os.path.isfile(path):
             return path
+    if importlib.util.find_spec("openstef") is not None:
+        return sys.executable
+    return None
+
+
+def openstef_problem(python):
+    """Why OpenSTEF can't run with `python`, in words for the GUI; None when it looks ready.
+    Only checks this interpreter's packages (another venv is trusted as configured)."""
+    if not python or not os.path.isfile(python):
+        return "missing"
+    if os.path.realpath(python) == os.path.realpath(sys.executable):
+        missing = [m for m in ("openstef", "xgboost") if importlib.util.find_spec(m) is None]
+        if missing:
+            return "packages:" + ",".join(missing)
     return None
 
 
