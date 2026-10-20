@@ -223,6 +223,20 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
 .tip .ln { display: inline-block; width: 14px; border-top: 2px solid; vertical-align: 3px; margin-right: 6px; }
 .empty { border: 1.5px dashed var(--line); border-radius: var(--radius-lg); padding: 28px; text-align: center; color: var(--ink-2); }
 
+/* ---------- step 3: OpenSTEF forecast view ---------- */
+.fc-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin: 28px 0 10px; }
+.fc-head .controls { margin: 0; }
+.fc-note { font-size: 0.85rem; color: var(--ink-2); margin: 2px 4px 6px; min-height: 2.6em; }
+.fc-note b { color: var(--ink); }
+.legend .band { display: inline-block; width: 22px; height: 10px; background: var(--shared-soft); border: 1px solid color-mix(in srgb, var(--shared) 40%, transparent); vertical-align: -1px; margin-right: 6px; }
+.glossary { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 0.92rem; }
+.glossary dt { font-weight: 650; color: var(--ink); } .glossary dd { margin: 0; color: var(--ink-2); }
+details.expert { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg); padding: 14px 18px; margin-top: 24px; }
+details.expert summary { cursor: pointer; font-weight: 650; }
+details.expert summary small { font-weight: 400; color: var(--ink-3); margin-left: 6px; }
+details.expert h4 { margin: 18px 0 6px; font-size: 0.95rem; }
+details.expert .kv { font-size: 0.86rem; }
+
 /* ---------- step 4 ---------- */
 .verdicts { display: grid; gap: 12px; margin-top: 8px; }
 .verdict { display: grid; grid-template-columns: 170px 1fr; gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
@@ -236,6 +250,7 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
 .next ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); }
 
 @media (max-width: 860px) {
+  .glossary { grid-template-columns: 1fr; }
   .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-top: 16px; }
   .rail { position: static; }
   .rail ol { display: flex; gap: 4px; }
@@ -373,6 +388,24 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
         </div>
       </div>
 
+      <div id="fc-block" hidden>
+        <div class="fc-head">
+          <div>
+            <h3>Forecast against what really happened</h3>
+            <div class="muted" id="fc-sub">Each community's last day and a half of the week, forecast before any of it was seen.</div>
+          </div>
+          <div class="controls"><label class="field">Week<select id="fc-week"></select></label></div>
+        </div>
+        <div class="legend" id="fc-legend">
+          <span><i class="ln" style="border-color:var(--ink)"></i>What really happened</span>
+          <span><i class="ln" style="border-color:var(--shared)"></i>OpenSTEF forecast</span>
+          <span><i class="band"></i>OpenSTEF's range (8 in 10)</span>
+          <span><i class="ln" style="border-color:var(--neutral);border-top-style:dashed"></i>Simple guess: same hour last week</span>
+        </div>
+        <div class="multiples" id="fc-charts"></div>
+        <p class="explain" id="fc-read"></p>
+      </div>
+
       <div class="chart-head">
         <div>
           <h3 id="chart-title">Forecast error per community</h3>
@@ -385,7 +418,17 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
       <div class="tablewrap" id="score-table" hidden></div>
 
       <p class="explain" id="s3-explain"></p>
-      <p class="explain"><strong>About this demo setup.</strong> The three community trainers run on one computer for
+      <div class="explain" id="glossary-box" hidden><strong>Words on this page</strong><dl class="glossary" id="glossary"></dl></div>
+      <details class="expert" id="expert" hidden>
+        <summary>For specialists<small>how the forecast is made and scored, and the exact AnyLog query</small></summary>
+        <dl class="kv" id="expert-kv"></dl>
+        <h4>Every score</h4>
+        <div class="tablewrap" id="expert-table"><p class="muted" style="margin:8px 10px">No weeks forecast yet.</p></div>
+        <h4>The query behind a forecast</h4>
+        <div class="controls" style="margin-bottom:8px"><label class="field">Community<select id="q-site"></select></label><button class="btn secondary" id="q-go">Show the query</button></div>
+        <div id="q-out" class="muted" style="font-size:.9rem">What OpenSTEF asked AnyLog for, built from the UNS: the community's buildings, both tables, hourly totals computed on the node.</div>
+      </details>
+      <p class="explain" id="setup-note"><strong>About this demo setup.</strong> The three community trainers run on one computer for
         convenience. Each one reads only its own community's data through AnyLog, and only model numbers are shared
         between communities. In production, each trainer runs next to its own node.</p>
       <div class="nav"><button class="btn secondary" data-prev>Back</button><button class="btn" data-next>Next: what it means</button></div>
@@ -398,7 +441,7 @@ details.settings summary { cursor: pointer; font-weight: 600; margin-bottom: 12p
         <p><button class="btn" data-goto="3">Go to training</button></p></div></div>
 
       <h3 style="margin-top:36px">The same pattern, with LF Energy projects</h3>
-      <p class="muted" style="max-width:70ch">Run each site's work where its data lives, and combine only results.
+      <p class="muted" style="max-width:70ch" id="s4-projects">Run each site's work where its data lives, and combine only results.
         The forecaster above is a stand-in. These projects plug into the same flow:</p>
       <div class="next">
         <div class="panel"><h3>Forecasting and machine learning</h3><ul><li>OpenSTEF: short-term energy forecasts</li><li>EnerGNN, OpenGridFM, AINETUS</li></ul><p class="muted" style="margin:8px 0 0;font-size:.9rem">Train and run on each operator's data.</p></div>
@@ -427,6 +470,8 @@ const nice = s => String(s).replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let CONFIG = null, NETWORK = null;
+let OSTEF = false;   // training_type: openstef -> forecasts instead of federated learning
+let FC = {};         // OpenSTEF: week -> {window: {site: [start, end]}, forecasts: {site: [hour rows]}, skipped}
 
 /* ---------------- mode, steps, theme ---------------- */
 let current = 1;
@@ -598,8 +643,8 @@ function drawDiagram() {
   sites.forEach((s, i) => { POS[s.site] = { x: 20 + (w - 40) * (i + 0.5) / n, y: 285 }; });
   sites.forEach(s => el("path", { class: "d-wire", d: `M${POS[s.site].x},${POS[s.site].y - 55} L${CENTER.x},${CENTER.y + 34}` }, svg));
   el("rect", { class: "d-center", id: "d-center", x: CENTER.x - 110, y: CENTER.y - 34, width: 220, height: 68, rx: 14 }, svg);
-  el("text", { class: "d-label", x: CENTER.x, y: CENTER.y - 4, "text-anchor": "middle" }, svg).textContent = "Center";
-  el("text", { class: "d-sub", x: CENTER.x, y: CENTER.y + 16, "text-anchor": "middle" }, svg).textContent = "combines what arrives";
+  el("text", { class: "d-label", x: CENTER.x, y: CENTER.y - 4, "text-anchor": "middle" }, svg).textContent = OSTEF ? "OpenSTEF" : "Center";
+  el("text", { class: "d-sub", x: CENTER.x, y: CENTER.y + 16, "text-anchor": "middle" }, svg).textContent = OSTEF ? "one model per community" : "combines what arrives";
   sites.forEach(s => {
     const p = POS[s.site], g = el("g", { id: `d-${s.site}` }, svg);
     el("rect", { class: "d-box", x: p.x - boxW / 2, y: p.y - 55, width: boxW, height: 110, rx: 14 }, g);
@@ -700,7 +745,7 @@ function watchInsert(since) {
 }
 
 /* ---------------- button 3: live data ---------------- */
-let liveWeek = 0;
+let liveWeek = 0, LIVE_PACE = 0, liveFirst = null;  // LIVE_PACE: measured seconds per simulated hour
 $("#live-go").onclick = async () => {
   const interval = Number($("#live-speed").value);
   setStatus("#live-status", "Starting…", true);
@@ -710,7 +755,7 @@ $("#live-go").onclick = async () => {
 $("#live-stop").onclick = async () => { await stopJob("live"); setStatus("#live-status", "Stopping after the current hour…", true); };
 function setPill(text, on) { $("#live-pill-text").textContent = text; $("#live-pill").classList.toggle("on", !!on); }
 function watchLive(since) {
-  liveWeek = 0;
+  liveWeek = 0; LIVE_PACE = 0; liveFirst = null;
   setPill("Live data starting", true);
   watch("live", since, ev => {
     if (ev.type === "setup") setStatus("#live-status", `Setting up ${ev.operators.length} nodes…`, true);
@@ -718,8 +763,13 @@ function watchLive(since) {
       const mins = Math.round(CONFIG.steps_per_round * ev.interval / 60);
       setStatus("#live-status", `Streaming from week ${ev.from_round}. A new week completes about every ${mins} minute${mins === 1 ? "" : "s"}.`, true);
     } else if (ev.type === "step") {
+      if (!liveFirst || ev.step < liveFirst.step) liveFirst = ev;  // a new pass restarts the step count
+      else if (ev.step > liveFirst.step) LIVE_PACE = (ev.t - liveFirst.t) / (ev.step - liveFirst.step);
+      const hour = (ev.step - 1) % CONFIG.steps_per_round + 1;
+      const perWeek = LIVE_PACE ? ` At this pace a week takes about ${Math.round(LIVE_PACE * CONFIG.steps_per_round / 60)} minutes.` : "";
       setPill(`Live: week ${ev.round}, ${ev.timestamp.slice(5)}`, true);
-      setStatus("#live-status", `Now at ${ev.timestamp}, week ${ev.round}. ${fmtInt(ev.rows)} readings in the last hour.`, true);
+      setStatus("#live-status", `Now at ${ev.timestamp}, week ${ev.round} (hour ${hour} of ${CONFIG.steps_per_round}). ` +
+        `${fmtInt(ev.rows)} readings in the last hour.${perWeek}`, true);
       if (ev.round !== liveWeek) { liveWeek = ev.round; loadNetwork(true); }
     }
   }, r => {
@@ -734,10 +784,12 @@ function watchLive(since) {
 /* ---------------- button 2: training ---------------- */
 let LAST_RESULTS = [], TOTALS = { raw: 0, sent: 0 }, PLANNED = 0, FIRST = 1, RESUMED = false, SITES = {};
 $("#run-go").onclick = async () => {
-  LAST_RESULTS = []; TOTALS = { raw: 0, sent: 0 }; FIRST = 1; RESUMED = false; updateMeters(); drawChart();
+  const resume = $("#resume").checked && !$("#resume-wrap").hidden;
+  TOTALS = { raw: 0, sent: 0 }; RESUMED = false; updateMeters();
+  if (!(OSTEF && resume)) { LAST_RESULTS = []; FC = {}; FIRST = 1; drawChart(); if (OSTEF) { fillWeeks(); drawForecast(); renderExpert(); } }
   $("#settings-box").open = false;
-  setRunStatus("Starting…", true);
-  try { await startJob("train", { ...readSettings(), resume: $("#resume").checked && !$("#resume-wrap").hidden }); }
+  setRunStatus(OSTEF ? "Starting OpenSTEF in its own Python environment…" : "Starting…", true);
+  try { await startJob("train", { ...(OSTEF ? {} : readSettings()), resume }); }
   catch (e) { setRunStatus(`Couldn't start: ${e.message}`, false, true); return; }
   watchTrain(0);
 };
@@ -748,6 +800,7 @@ function watchTrain(since) {
   watch("train", since, handle, finish);
 }
 async function handle(ev) {
+  if (OSTEF) return handleOpenstef(ev);
   if (ev.type === "start") {
     PLANNED = ev.rounds; FIRST = ev.first_round || 1; RESUMED = !!ev.resumed; SITES = ev.sites;
     $("#roundline").textContent = RESUMED ? `Continuing: ${weekRange(FIRST, PLANNED)}` : `Round 0 of ${PLANNED}`;
@@ -774,36 +827,56 @@ async function handle(ev) {
   }
 }
 async function finish(r) {
-  if (r.status === "done") {
+  if (OSTEF && r.status === "done") {
+    setRunStatus("Done. Every forecast is saved, so a later run only needs the new weeks. Step 4 explains what the results mean.", false);
+    $("#roundline").textContent = PLANNED ? `${nice(weekRange(FIRST, PLANNED))} forecast` : "Done";
+    $('.rail a[data-step="3"]').classList.add("done");
+  } else if (r.status === "done") {
     setRunStatus("Done. The model is saved, so a later run can continue from it. See step 4 for what it means.", false);
     $("#roundline").textContent = RESUMED ? `${nice(weekRange(FIRST, PLANNED))} learned` : `All ${PLANNED} rounds complete`;
     $('.rail a[data-step="3"]').classList.add("done");
   } else if (r.status === "no_new_rounds") {
-    const mins = Math.round(CONFIG.steps_per_round * (CONFIG.live_interval || 2) / 60);
-    setRunStatus(isOn("live")
-      ? `No new complete week yet. With live data streaming, one completes about every ${mins} minutes.`
-      : "No new weeks since the saved model. Start live data in step 1, or untick \"Continue\" to train from scratch.", false);
-    $("#roundline").textContent = "Nothing new to learn";
+    const ev = r.last && r.last.type === "no_new_rounds" ? r.last : null;
+    const p = ev && ev.progress;
+    const pace = (p && p.seconds_per_hour) || LIVE_PACE || CONFIG.live_interval || 2;
+    // a week counts once the next one starts, i.e. after its last hour plus one
+    const left = p ? p.of - p.hour + 1 : CONFIG.steps_per_round;
+    const mins = Math.max(1, Math.round(left * pace / 60));
+    const where = p ? `Week ${p.week} is ${p.hour} of ${p.of} hours in, so it's ready in about ${mins} minute${mins === 1 ? "" : "s"}` +
+      ` (each simulated hour takes about ${pace.toFixed(1)} seconds to publish).` : `One completes about every ${mins} minutes.`;
+    const weeks = ev && ev.per_site ? Object.entries(ev.per_site).map(([s, w]) => `${nice(s)} up to week ${w}`).join(", ") : "";
+    const facts = !ev ? "" : OSTEF ? ` Weeks up to ${ev.trained} are already forecast.` :
+      ` The saved model has learned up to week ${ev.trained}; AnyLog has ${weeks}` +
+      (ev.live ? ` (the newest week is still being filled, so week ${ev.trained + 1} is ready once week ${ev.trained + 2} starts).` : ".");
+    setRunStatus((isOn("live")
+      ? `No new complete week yet. ${where}`
+      : OSTEF ? "No new weeks to forecast. Start live data in step 1, or untick \"Only new weeks\" to forecast every week again."
+      : "No new weeks since the saved model. Start live data in step 1, or untick \"Continue\" to train from scratch.") + facts, false);
+    $("#roundline").textContent = OSTEF ? "Nothing new to forecast" : "Nothing new to learn";
   } else if (r.status === "stopped") setRunStatus(`Stopped after ${LAST_RESULTS.length} round${LAST_RESULTS.length === 1 ? "" : "s"}.`, false);
   else if (r.status === "error") setRunStatus(`The run stopped with an error: ${r.error}`, false, true);
   $$(".d-box").forEach(b => b.classList.remove("active")); $$(".d-data").forEach(b => b.classList.remove("busy"));
   renderSummary();
   await refreshSaved();
+  if (OSTEF) await loadOpenstef();
 }
 async function refreshSaved() {
   try { CONFIG = { ...CONFIG, ...(await api("/api/config")) }; } catch (e) { return; }
   const saved = CONFIG.saved_model;
   $("#resume-wrap").hidden = !saved;
-  if (saved) $("#resume-sub").textContent = `The saved model has learned up to week ${saved.last_round}. Only newer weeks are used, and a model learning the same weeks from scratch runs alongside for comparison.`;
+  if (saved && OSTEF) $("#resume-sub").textContent = `Weeks up to ${saved.last_round} are done (${saved.weeks} forecast; the rest had too little history). Untick to forecast every week again.`;
+  else if (saved) $("#resume-sub").textContent = `The saved model has learned up to week ${saved.last_round}. Only newer weeks are used, and a model learning the same weeks from scratch runs alongside for comparison.`;
 }
 function updateMeters() {
-  $("#m-raw").textContent = fmtBytes(TOTALS.raw); $("#m-sent").textContent = fmtBytes(TOTALS.sent);
+  const f = OSTEF ? fmtInt : fmtBytes;
+  $("#m-raw").textContent = f(TOTALS.raw); $("#m-sent").textContent = f(TOTALS.sent);
   const max = Math.max(TOTALS.raw, TOTALS.sent, 1);
   $("#b-raw").style.width = (100 * TOTALS.raw / max) + "%"; $("#b-sent").style.width = (100 * TOTALS.sent / max) + "%";
 }
 
 /* ---------------- step 3: the chart (small multiples, one shared scale) ---------------- */
 const SERIES = [
+  { key: "openstef", color: "var(--shared)", dash: "" },
   { key: "federated", color: "var(--shared)", dash: "" },
   { key: "local", color: "var(--local)", dash: "" },
   { key: "fresh", color: "var(--fresh)", dash: "" },
@@ -814,7 +887,7 @@ function value(scores, k) { const s = scores?.[k]; return s ? s[CONFIG.task.metr
 function drawChart() {
   const box = $("#multiples");
   if (!LAST_RESULTS.length) { box.innerHTML = `<div class="empty">Start training to see each community's results appear round by round.</div>`; $("#toggle-table").hidden = true; return; }
-  const sites = Object.keys(LAST_RESULTS[0].scores);
+  const sites = [...new Set(LAST_RESULTS.flatMap(r => Object.keys(r.scores)))].sort();
   const present = SERIES.filter(sr => LAST_RESULTS.some(r => sites.some(s => value(r.scores[s], sr.key) != null)));
   const all = LAST_RESULTS.flatMap(r => sites.flatMap(s => SERIES.map(x => value(r.scores[s], x.key)))).filter(v => v != null);
   const yMax = niceMax(Math.max(...all)), yMin = 0;
@@ -847,7 +920,7 @@ function drawChart() {
       let best = LAST_RESULTS[0];
       LAST_RESULTS.forEach(r => { if (Math.abs(x(r.round) - p.x) < Math.abs(x(best.round) - p.x)) best = r; });
       cross.setAttribute("x1", x(best.round)); cross.setAttribute("x2", x(best.round)); cross.setAttribute("visibility", "visible");
-      tip.innerHTML = `<b>Round ${best.round}</b><br>` + present.map(sr => {
+      tip.innerHTML = `<b>${OSTEF ? "Week" : "Round"} ${best.round}</b><br>` + present.map(sr => {
         const v = value(best.scores[site], sr.key); return v == null ? "" : `<span class="ln" style="border-color:${sr.color};${sr.dash ? "border-top-style:dashed" : ""}"></span>${esc(seriesLabel(sr.key))}: ${v}<br>`;
       }).join("");
       const r = m.getBoundingClientRect(), sr = svg.getBoundingClientRect();
@@ -858,7 +931,7 @@ function drawChart() {
     $(".hit", m).addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
   });
   $("#legend").innerHTML = present.map(sr => `<span><i class="ln" style="border-color:${sr.color};${sr.dash ? "border-top-style:dashed" : ""}"></i>${esc(seriesLabel(sr.key))}</span>`).join("");
-  $("#toggle-table").hidden = false;
+  $("#toggle-table").hidden = OSTEF;
   renderTable(sites, present);
 }
 function niceMax(v) { if (!(v > 0)) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p * 2) / 2 * p; }
@@ -872,8 +945,242 @@ $("#toggle-table").onclick = () => {
   $("#toggle-table").textContent = t.hidden ? "Show the numbers" : "Hide the numbers";
 };
 
+/* ---------------- step 3/4: OpenSTEF ---------------- */
+function setupOpenstef(t) {
+  $("#s3-title").textContent = t.headline;
+  $("#s3-lede").textContent = t.summary;
+  $('.rail a[data-step="3"] .r-title').firstChild.textContent = "Forecast";
+  $('.rail a[data-step="3"] .r-sub').textContent = "The next day and a half";
+  $$("[data-next]").forEach(b => { if (b.textContent === "Next: learn together") b.textContent = "Next: forecast"; });
+  $("#diagram").setAttribute("aria-label", "Communities sending hourly totals to OpenSTEF");
+  $(".legend-inline").innerHTML = `<span><i class="sw local"></i>Building readings: stay on the community's node</span>
+    <span><i class="sw shared"></i>Hourly totals: sent to OpenSTEF</span>`;
+  const rows = $$(".meter .row > span:first-child");
+  rows[0].textContent = "Building readings that stayed on the nodes";
+  rows[1].textContent = "Hourly totals AnyLog sent to OpenSTEF";
+  updateMeters();
+  $("#settings-box").hidden = true;
+  $("#resume-wrap span").firstChild.textContent = "Only new weeks";
+  $("#run-go").textContent = "Start forecasting";
+  $("#chart-title").textContent = "How far off, week by week";
+  $("#chart-sub").textContent = "Average error per hour, in kWh, for the whole community. Lower is better. One point per week.";
+  $("#s3-explain").innerHTML = `<strong>How it works.</strong> ${esc(t.local_step)} ${esc(t.combine_step)} <strong>What travels:</strong> ${esc(t.travels)}`;
+  $("#glossary").innerHTML = t.glossary.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  $("#glossary-box").hidden = false;
+  $("#expert-kv").innerHTML = t.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  $("#expert").hidden = false;
+  $("#fc-block").hidden = false;
+  $("#setup-note").innerHTML = `<strong>About this demo setup.</strong> OpenSTEF runs on one computer for convenience, in its own
+    Python environment, and reads each community only through AnyLog queries. In production it would run at the grid
+    operator or next to each node, with the same queries.`;
+  $("#s4-projects").textContent = "Run each site's work where its data lives, and move only results. OpenSTEF is running above; these projects plug into the same flow:";
+  $("#fc-week").onchange = drawForecast;
+  $("#q-go").onclick = showQuery;
+}
+
+async function loadOpenstef() {
+  let r;
+  try { r = await api("/api/openstef/results"); } catch (e) { r = null; }
+  if (!r) { fillWeeks(); drawForecast(); renderExpert(); return; }
+  if (isOn("train") && !RESUMED) return;  // a fresh run is filling these in from its events
+  FC = {}; LAST_RESULTS = [];
+  for (const e of r.rounds || []) addWeek(e, Object.fromEntries(Object.entries(r.forecasts || {})
+    .map(([s, weeks]) => [s, weeks[String(e.round)]]).filter(([, v]) => v)));
+  const weeks = Object.keys(FC).map(Number);
+  if (weeks.length) { FIRST = Math.min(...weeks); PLANNED = Math.max(...weeks); }
+  fillWeeks(); drawChart(); drawForecast(); renderSummary(); renderExpert();
+}
+function addWeek(e, forecasts) {
+  FC[e.round] = { window: e.window || {}, forecasts: forecasts || {}, skipped: e.skipped || {}, scores: e.scores || {} };
+  LAST_RESULTS = LAST_RESULTS.filter(x => x.round !== e.round);
+  if (Object.keys(e.scores || {}).length) LAST_RESULTS.push({ round: e.round, scores: e.scores });
+  LAST_RESULTS.sort((a, b) => a.round - b.round);
+}
+
+const plainSkip = reason => /^only/.test(reason) ? `not enough history yet (${reason}; OpenSTEF looks back two weeks)` : reason;
+async function handleOpenstef(ev) {
+  if (ev.type === "start") {
+    PLANNED = ev.rounds; FIRST = ev.first_round || 1; RESUMED = !!ev.resumed; SITES = ev.sites || {};
+    if (!Object.keys(POS).length && NETWORK && NETWORK.sites.length) drawDiagram();
+    $("#roundline").textContent = PLANNED ? `Forecasting ${weekRange(FIRST, PLANNED)}` : "Nothing to forecast";
+    setRunStatus("Asking the UNS where each community's buildings are…", true);
+  } else if (ev.type === "site_training") {
+    $("#roundline").textContent = `Week ${ev.round} of ${PLANNED}`;
+    setRunStatus(`${nice(ev.site)}: AnyLog adds up its buildings' hourly use on its own node. OpenSTEF learns from those totals, then forecasts the end of week ${ev.round} without seeing it…`, true);
+    siteBusy(ev.site, true);
+  } else if (ev.type === "site_skipped") {
+    siteBusy(ev.site, false);
+    setRunStatus(`${nice(ev.site)}, week ${ev.round}: skipped, ${plainSkip(ev.reason)}.`, true);
+  } else if (ev.type === "site_trained") {
+    siteBusy(ev.site, false);
+    TOTALS.raw += ev.train_hours * ev.assets; TOTALS.sent += ev.train_hours; updateMeters();
+    setRunStatus(`${nice(ev.site)}: forecast ready. AnyLog sent ${fmtInt(ev.train_hours)} hourly totals; the ${fmtInt(ev.train_hours * ev.assets)} building readings behind them stayed on the node.`, true);
+    if (POS[ev.site]) await fly(siteTop(ev.site), centerBottom());
+  } else if (ev.type === "round") {
+    addWeek(ev, ev.forecasts);
+    fillWeeks(ev.round); drawChart(); drawForecast(); renderSummary(); renderExpert();
+    const c = $("#d-center"); if (c) { c.classList.remove("pulse"); void c.getBBox(); c.classList.add("pulse"); }
+    setRunStatus(Object.keys(ev.scores).length ? `Week ${ev.round} forecast and checked against what really happened.` : `Week ${ev.round} skipped: ${plainSkip(Object.values(ev.skipped)[0] || "no data")}.`, true);
+  } else if (ev.type === "error") {
+    setRunStatus(`The run stopped with an error: ${ev.message}`, false, true);
+  }
+}
+
+function fillWeeks(pick) {
+  const sel = $("#fc-week"), weeks = Object.keys(FC).map(Number).filter(w => Object.keys(FC[w].forecasts).length).sort((a, b) => a - b);
+  const keep = pick ?? (Number(sel.value) || weeks[weeks.length - 1]);
+  sel.innerHTML = weeks.map(w => `<option value="${w}">Week ${w}</option>`).join("");
+  if (weeks.length) sel.value = String(weeks.includes(keep) ? keep : weeks[weeks.length - 1]);
+  sel.disabled = !weeks.length;
+}
+
+const fmtKwh = v => v == null ? "–" : (Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
+const parseTs = ts => new Date(String(ts).replace(" ", "T"));
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function segments(points) {  // split a line where values are missing
+  const out = []; let cur = [];
+  for (const p of points) { if (p[1] == null) { if (cur.length) out.push(cur); cur = []; } else cur.push(p); }
+  if (cur.length) out.push(cur);
+  return out;
+}
+function drawForecast() {
+  const box = $("#fc-charts"), week = Number($("#fc-week").value), data = FC[week];
+  if (!data || !Object.keys(data.forecasts).length) {
+    box.innerHTML = `<div class="empty">${isOn("train") ? "The first forecast appears here as soon as a week is done." : "Start forecasting to see OpenSTEF's forecast next to what really happened."}</div>`;
+    $("#fc-read").innerHTML = ""; return;
+  }
+  const sites = Object.keys(data.forecasts).sort();
+  const vals = sites.flatMap(s => data.forecasts[s].flatMap(h => [h.actual, h.forecast, h.quantile_P10, h.quantile_P90, h.last_week])).filter(v => v != null);
+  const yMax = niceMax(Math.max(...vals)), lo = Math.min(0, ...vals), yMin = lo < 0 ? -niceMax(-lo) : 0;
+  const W = 300, H = 180, L = 36, R = 10, T = 10, B = 30;
+  box.innerHTML = sites.map(s => {
+    const rows = data.forecasts[s], n = rows.length;
+    const x = i => L + (W - L - R) * (n === 1 ? 0.5 : i / (n - 1)), y = v => T + (H - T - B) * (1 - (v - yMin) / (yMax - yMin));
+    let g = `<g class="axis">${[yMin, yMin < 0 ? 0 : (yMax + yMin) / 2, yMax].map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${+t.toFixed(1)}</text>`).join("")}`;
+    rows.forEach((h, i) => { const d = parseTs(h.timestamp); if (d.getHours() % 12 === 0) g += `<text x="${x(i)}" y="${H - 14}" text-anchor="middle">${d.getHours() === 0 ? DAYS[d.getDay()] : "12:00"}</text>`; });
+    g += `<text x="${(L + W - R) / 2}" y="${H - 1}" text-anchor="middle">kWh per hour</text></g>`;
+    segments(rows.map((h, i) => [i, h.quantile_P10 != null && h.quantile_P90 != null ? 1 : null])).forEach(seg => {
+      const top = seg.map(([i]) => `${x(i)},${y(rows[i].quantile_P90)}`), bot = seg.slice().reverse().map(([i]) => `${x(i)},${y(rows[i].quantile_P10)}`);
+      g += `<polygon points="${top.concat(bot).join(" ")}" fill="var(--shared-soft)" stroke="none"/>`;
+    });
+    const line = (key, color, extra) => segments(rows.map((h, i) => [i, h[key]])).map(seg =>
+      `<polyline fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" ${extra || ""} points="${seg.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")}"/>`).join("");
+    g += line("last_week", "var(--neutral)", `stroke-dasharray="5 4"`) + line("forecast", "var(--shared)") + line("actual", "var(--ink)");
+    g += `<line class="cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--ink-3)" stroke-width="1" visibility="hidden"/>`;
+    g += `<rect class="hit" x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/>`;
+    const sc = data.scores[s] || {}, o = sc.openstef || {}, b = sc.baseline || {};
+    let note = "";
+    if (o.mae_kwh != null && b.mae_kwh != null) {
+      const pct = Math.round(100 * Math.abs(b.mae_kwh - o.mae_kwh) / b.mae_kwh);
+      note = `Off by <b>${fmtKwh(o.mae_kwh)} kWh</b> an hour on average; the simple guess, by ${fmtKwh(b.mae_kwh)}. ` +
+        (o.mae_kwh < b.mae_kwh ? `<b>OpenSTEF was ${pct}% closer.</b>` : o.mae_kwh > b.mae_kwh ? `The simple guess was ${pct}% closer this week.` : "A tie.");
+      if (o.p10_p90_coverage != null) note += ` Inside its range ${Math.round(100 * o.p10_p90_coverage)}% of the time.`;
+    }
+    return `<div class="mult" data-site="${esc(s)}"><h4>${esc(nice(s))}</h4><div class="fc-note">${note}</div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Forecast and actual electricity use for ${esc(nice(s))}, week ${week}">${g}</svg><div class="tip"></div></div>`;
+  }).join("");
+  $$("#fc-charts .mult").forEach(m => {
+    const svg = $("svg", m), tip = $(".tip", m), cross = $(".cross", m), rows = data.forecasts[m.dataset.site], n = rows.length;
+    const x = i => L + (W - L - R) * (n === 1 ? 0.5 : i / (n - 1));
+    $(".hit", m).addEventListener("pointermove", ev => {
+      const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const i = Math.max(0, Math.min(n - 1, Math.round((p.x - L) / (W - L - R) * (n - 1)))), h = rows[i], d = parseTs(h.timestamp);
+      cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+      tip.innerHTML = `<b>${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:00</b><br>` +
+        `<span class="ln" style="border-color:var(--panel)"></span>Really used: ${fmtKwh(h.actual)} kWh<br>` +
+        `<span class="ln" style="border-color:var(--shared)"></span>Forecast: ${fmtKwh(h.forecast)} kWh<br>` +
+        (h.quantile_P10 != null ? `Range: ${fmtKwh(h.quantile_P10)} to ${fmtKwh(h.quantile_P90)}<br>` : "") +
+        `<span class="ln" style="border-color:var(--neutral);border-top-style:dashed"></span>Same hour last week: ${fmtKwh(h.last_week)} kWh`;
+      const r = m.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+      tip.style.left = (sr.left - r.left + x(i) / W * sr.width) + "px"; tip.style.top = (sr.top - r.top + 8) + "px"; tip.style.display = "block";
+    });
+    $(".hit", m).addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+  });
+  const anyNeg = vals.some(v => v < 0);
+  $("#fc-read").innerHTML = `<strong>How to read it.</strong> The dark line is what each community really used, hour by hour,
+    over the last day and a half of week ${week}. OpenSTEF drew the blue line <em>before</em> seeing any of it, from the
+    community's earlier hours in AnyLog. The closer the two lines, the better. The shaded range is where OpenSTEF expected
+    the real value to land 8 times out of 10, so the dark line should mostly stay inside it. The dashed line is the
+    simple guess any forecast has to beat.${anyNeg ? " Below zero means the buildings' solar panels produced more than they used." : ""}`;
+}
+
+function renderExpert() {
+  const weeks = Object.keys(FC).map(Number).sort((a, b) => a - b);
+  if (!weeks.length) { $("#expert-table").innerHTML = `<p class="muted" style="margin:8px 10px">No weeks forecast yet.</p>`; }
+  else {
+    const head = `<tr><th>Week</th><th>Community</th><th>MAE OpenSTEF</th><th>MAE last week</th><th>RMSE OpenSTEF</th><th>RMSE last week</th><th>R² OpenSTEF</th><th>P10–P90 coverage</th><th>Hours</th></tr>`;
+    const body = weeks.flatMap(w => {
+      const d = FC[w], sites = [...new Set([...Object.keys(d.scores), ...Object.keys(d.skipped)])].sort();
+      return sites.map(s => {
+        if (d.skipped[s]) return `<tr><td>${w}</td><td>${esc(nice(s))}</td><td colspan="7" class="muted">skipped: ${esc(d.skipped[s])}</td></tr>`;
+        const o = d.scores[s].openstef || {}, b = d.scores[s].baseline || {};
+        return `<tr><td>${w}</td><td>${esc(nice(s))}</td><td>${o.mae_kwh ?? "–"}</td><td>${b.mae_kwh ?? "–"}</td><td>${o.rmse_kwh ?? "–"}</td><td>${b.rmse_kwh ?? "–"}</td><td>${o.r2 ?? "–"}</td><td>${o.p10_p90_coverage ?? "–"}</td><td>${o.samples ?? "–"}</td></tr>`;
+      });
+    }).join("");
+    $("#expert-table").innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  }
+  const sites = NETWORK ? NETWORK.sites.map(s => s.site) : [];
+  const sel = $("#q-site"), keep = sel.value;
+  sel.innerHTML = sites.map(s => `<option value="${esc(s)}">${esc(nice(s))}</option>`).join("");
+  if (sites.includes(keep)) sel.value = keep;
+}
+async function showQuery() {
+  const site = $("#q-site").value, out = $("#q-out");
+  if (!site) return;
+  out.innerHTML = `<span class="spinner"></span>`;
+  try {
+    const r = await api(`/api/openstef/query?site=${encodeURIComponent(site)}`);
+    const objs = Object.entries(r.objects).map(([t, o]) => `<dt>${esc(t)}</dt><dd>${esc(o.dbms)}: <code>${esc(o.where.join(" OR "))}</code></dd>`).join("");
+    out.innerHTML = `<div>From the UNS, ${esc(nice(site))}'s objects:</div><dl class="kv">${objs}</dl>
+      <div style="margin-top:10px">The query, sent to <b>${esc(r.query_node)}</b> with <code>destination: network</code>:</div><pre class="code">${esc(r.command)}</pre>`;
+  } catch (e) { out.textContent = `Couldn't build the query: ${e.message}`; }
+}
+
+function renderSummaryOpenstef() {
+  const all = LAST_RESULTS.flatMap(r => Object.entries(r.scores).map(([s, v]) => ({ s, w: r.round, o: v.openstef || {}, b: v.baseline || {} })))
+    .filter(x => x.o.mae_kwh != null && x.b.mae_kwh != null);
+  if (!all.length) {
+    $("#summary").innerHTML = `<div class="empty">Run the forecast in step 3 and the results will be explained here.<p><button class="btn" data-goto="3">Go to forecasting</button></p></div>`;
+    return;
+  }
+  const mean = a => a.reduce((n, v) => n + v, 0) / Math.max(1, a.length);
+  const wins = all.filter(x => x.o.mae_kwh < x.b.mae_kwh).length;
+  const gain = Math.round(100 * (1 - mean(all.map(x => x.o.mae_kwh)) / mean(all.map(x => x.b.mae_kwh))));
+  const cov = all.filter(x => x.o.p10_p90_coverage != null);
+  const inside = cov.length ? Math.round(100 * mean(cov.map(x => x.o.p10_p90_coverage))) : null;
+  const weeks = [...new Set(all.map(x => x.w))].sort((a, b) => a - b);
+  const sites = [...new Set(all.map(x => x.s))].sort();
+  const verdicts = sites.map(s => {
+    const mine = all.filter(x => x.s === s), o = mean(mine.map(x => x.o.mae_kwh)), b = mean(mine.map(x => x.b.mae_kwh));
+    const pct = Math.round(100 * Math.abs(b - o) / b), won = mine.filter(x => x.o.mae_kwh < x.b.mae_kwh).length;
+    const c = mine.filter(x => x.o.p10_p90_coverage != null), ci = c.length ? Math.round(100 * mean(c.map(x => x.o.p10_p90_coverage))) : null;
+    let text = `Over ${mine.length} week${mine.length === 1 ? "" : "s"}, OpenSTEF was off by ${fmtKwh(o)} kWh an hour on average, against ${fmtKwh(b)} for the simple guess: ` +
+      (o < b ? `${pct}% closer` : `${pct}% further off`) + `, and the better of the two in ${won} of ${mine.length} weeks.`;
+    if (ci != null) text += ` The real value fell inside its range ${ci}% of the time (it aims for 80%)` +
+      (ci < 65 ? ", so it is more certain of itself than it should be." : ci > 92 ? ", so its range is wider than it needs to be." : ", about right.");
+    return `<div class="verdict"><div class="who">${esc(nice(s))}</div><div>${esc(text)}</div></div>`;
+  }).join("");
+  $("#summary").innerHTML = `
+    <p class="lede">OpenSTEF forecast the last day and a half of ${weekRange(weeks[0], weeks[weeks.length - 1])} for each
+      community, before seeing it, then each forecast was checked against what really happened.</p>
+    <div class="headline">
+      <div class="panel"><div class="big">${wins} of ${all.length}</div><p>community-weeks where OpenSTEF beat the simple guess (same hour last week).</p></div>
+      <div class="panel"><div class="big">${gain > 0 ? gain + "%" : "–"}</div><p>${gain > 0 ? "smaller error than the simple guess, on average." : `OpenSTEF was not ahead of the simple guess on average yet (${-gain}% behind).`}</p></div>
+      ${inside != null ? `<div class="panel"><div class="big">${inside}%</div><p>of hours fell inside OpenSTEF's range. It aims for 80%: an honest range is what lets an operator plan for the bad case.</p></div>` : ""}
+    </div>
+    <div class="verdicts">${verdicts}</div>
+    <p class="explain"><strong>Why this matters.</strong> A grid operator plans and buys energy a day ahead; every kWh the
+      forecast misses has to be covered at short notice, usually at a higher price. Beating "same as last week" is the
+      first bar any forecast has to clear${weeks.length < 6 ? `. With only ${weeks.length} week${weeks.length === 1 ? "" : "s"} forecast, a single unusual day moves these numbers a lot, so publish more weeks before drawing conclusions` : ""}.</p>
+    <p class="explain"><strong>What AnyLog did.</strong> OpenSTEF never saw a single building's readings. For every forecast,
+      AnyLog found each community's buildings by name in the UNS, added up their hourly use on the community's own node,
+      and returned only those totals. The same query works for any community, on any node, as new ones join.</p>`;
+}
+
 /* ---------------- step 4: summary ---------------- */
 function renderSummary() {
+  if (OSTEF) return renderSummaryOpenstef();
   if (!LAST_RESULTS.length) return;
   const last = LAST_RESULTS[LAST_RESULTS.length - 1], task = CONFIG.task;
   const better = (a, b) => task.lower_is_better ? a < b : a > b;
@@ -909,11 +1216,14 @@ function renderSummary() {
   try { CONFIG = await api("/api/config"); }
   catch (e) { $("#s1-status").className = "status err"; $("#s1-status").textContent = `The demo server isn't configured: ${e.message}`; return; }
   const t = CONFIG.task;
+  OSTEF = CONFIG.training_type === "openstef";
+  if (OSTEF) setupOpenstef(t); else {
   $("#s3-title").textContent = t.title ? `${t.title}: learn from everyone's data without pooling it` : $("#s3-title").textContent;
   $("#s3-lede").textContent = t.summary;
   $("#s3-explain").innerHTML = `<strong>How it works.</strong> ${esc(t.local_step)} ${esc(t.combine_step)} <strong>What travels:</strong> ${esc(t.travels)}`;
   $("#chart-title").textContent = t.metric_label || "Score per community";
   $("#chart-sub").textContent = `${t.lower_is_better ? "Lower" : "Higher"} is better. One point per round; every community is scored on its own held-back data.`;
+  }
   const weeks = Math.round(CONFIG.simulation.steps / CONFIG.steps_per_round);
   $("#ins-desc").textContent = `Simulates ${weeks} week${weeks === 1 ? "" : "s"} of the CityLearn neighborhood and sends each building's hourly readings to its own community's node. First it sets up the mapping policy and message client on every node.`;
   const speed = $("#live-speed");
@@ -923,6 +1233,7 @@ function renderSummary() {
   show(1);
   syncButtons();
   await loadNetwork();
+  if (OSTEF) await loadOpenstef();
   // pick up jobs already running (e.g. after a page reload)
   const st = await api("/api/status").catch(() => null);
   if (st) {

@@ -34,6 +34,7 @@ def load_settings(config_file=CONFIG_FILE):
     for key in ("uns_root", "train_table", "test_table"):  # same data as the federated run
         openstef.setdefault(key, training.get(key))
     openstef_results = openstef.pop("results", "results/openstef_results.json")
+    openstef_python = openstef.pop("python", None) or _default_openstef_python()
     return {
         "content": content,
         "operators": operators,
@@ -47,7 +48,17 @@ def load_settings(config_file=CONFIG_FILE):
         "training_type": content.get("training_type", "fl"),   # fl | openstef
         "openstef": openstef,
         "openstef_results_file": os.path.join(REPO, openstef_results),
+        "openstef_python": openstef_python,   # the GUI runs OpenSTEF with this interpreter
     }
+
+
+def _default_openstef_python():
+    """The OpenSTEF venv's python, if it sits in the repo as venv-openstef (as the README sets it up)."""
+    for path in (os.path.join(REPO, "venv-openstef", "Scripts", "python.exe"),
+                 os.path.join(REPO, "venv-openstef", "bin", "python")):
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def setup_operators(settings):

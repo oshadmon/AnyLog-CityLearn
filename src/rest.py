@@ -2,7 +2,7 @@
 Every call to AnyLog, in one place. Everything else (publisher, federated training, OpenSTEF, GUI)
 goes through the functions here, and nothing else talks to AnyLog directly.
 
-  connection    configure()  execute()  rows()
+  connection    configure()  execute()  query_anylog()  rows()
   publishing    publish_policy()  run_msg_client()  publish_to_anylog()  check_data()
   UNS           discover()  list_communities()  get_objects()  node_of()
   row queries   build_sql()  sql_command()  fetch()                  (federated training, GUI)
@@ -48,26 +48,37 @@ def configure(settings=None):
     CONFIG.update({k: v for k, v in (settings or {}).items() if v is not None})
 
 
-def execute(conn, command, destination=None, payload=None, headers=None, timeout=None, session=None):
+def execute(conn: str, headers: dict | None = None, payload: str | None = None,
+            session: requests.Session | None = None):
     """
-    Run one AnyLog command over REST. GET for queries; POST when there is a payload (policies,
-    data). Returns the parsed JSON reply, or the text when the reply isn't JSON.
+    POST one request to an AnyLog node. Returns the parsed JSON reply, or the text when the reply
+    isn't JSON. Callers build the headers / payload; query_anylog() covers commands and queries.
     """
     sender = session or requests
-    all_headers = {"command": command, "User-Agent": CONFIG["user_agent"], **(headers or {})}
-    if destination:
-        all_headers["destination"] = destination
     url = conn if conn.startswith("http") else f"http://{conn}"
     try:
-        response = sender.request("POST" if payload is not None else "GET", url, headers=all_headers,
-                                  data=payload, timeout=timeout or CONFIG["timeout"])
+        response = sender.request(method="POST", url=url, headers=headers or {}, data=payload,
+                                  timeout=CONFIG["timeout"])
         response.raise_for_status()
     except Exception as error:
-        raise IOError(f"AnyLog command failed on {conn}: `{command[:200]}` ({error})") from None
+        command = (headers or {}).get("command") or str(payload)[:120]
+        raise IOError(f"AnyLog command failed on {conn}: `{command}` ({error})") from None
     try:
         return response.json()
     except ValueError:
         return response.text
+
+
+def query_anylog(conn: str, command: str, destination: str | None = None):
+    """
+    Run one command (a `blockchain get`, `get ...` or `sql ...`) with the command in a JSON body.
+    destination="network" for SQL across the operators; None for commands the node answers itself.
+    Returns the raw reply; SQL callers pass it through rows().
+    """
+    body = {"command": command, "AnyLog-Agent": CONFIG["user_agent"]}
+    if destination:
+        body["destination"] = destination
+    return execute(conn=conn, headers={"Content-Type": "application/json"}, payload=json.dumps(body))
 
 
 def rows(reply):
@@ -95,20 +106,26 @@ def mapping_policy(db_name):
 
 def publish_policy(conn, db_name):
     """Add the mapping policy to the ledger, unless it's there already."""
-    if execute(conn, f"blockchain get mapping where id={CONFIG['topic']}"):
+    if query_anylog(conn, f"blockchain get mapping where id={CONFIG['topic']}"):
         return
-    execute(conn, "blockchain insert where policy=!new_policy and local=true and master=!ledger_conn",
-            payload=f"<new_policy={json.dumps(mapping_policy(db_name))}>")
+    headers = {
+        "command": "blockchain insert where policy=!new_policy and local=true and master=!ledger_conn",
+        "AnyLog-Agent": CONFIG["user_agent"],
+    }
+    execute(conn=conn, headers=headers, payload=f"<new_policy={json.dumps(mapping_policy(db_name))}>")
 
 
 def run_msg_client(conn):
     """Start the REST message client for the topic, unless one is running already."""
     topic = CONFIG["topic"]
-    reply = execute(conn, f"get msg client where topic={topic}")
+    reply = query_anylog(conn, f"get msg client where topic={topic}")
     if str(reply).replace("\n", "").strip() == "No message client subscriptions":
-        execute(conn, f"run msg client where broker=rest and log=false and user-agent=anylog and "
-                      f"master_node=!ledger_conn and topic=(name={topic}/# and dynamic=true and policy={topic})",
-                payload=None)
+        headers = {
+            "command": f"run msg client where broker=rest and log=false and user-agent=anylog and "
+                       f"master_node=!ledger_conn and topic=(name={topic}/# and dynamic=true and policy={topic})",
+            "AnyLog-Agent": CONFIG["user_agent"],
+        }
+        execute(conn=conn, headers=headers)
 
 
 def publish_to_anylog(conn, rows_to_send):
@@ -118,9 +135,13 @@ def publish_to_anylog(conn, rows_to_send):
     """
     with requests.Session() as session:
         for row in rows_to_send:
-            topic = f"{CONFIG['topic']}/{row.get('table')}/{row.get('community_id')}/{row.get('building_id')}"
-            execute(conn, "data", payload=json.dumps(row), session=session,
-                    headers={"topic": topic, "Content-Type": "text/plain"})
+            headers = {
+                "command": "data",
+                "topic": f"{CONFIG['topic']}/{row.get('table')}/{row.get('community_id')}/{row.get('building_id')}",
+                "Content-Type": "text/plain",
+                "User-Agent": CONFIG["user_agent"],
+            }
+            execute(conn=conn, headers=headers, payload=json.dumps(row), session=session)
 
 
 def check_data(conn, db_name, train_table="building_obs_train", test_table="building_obs_test"):
@@ -128,7 +149,7 @@ def check_data(conn, db_name, train_table="building_obs_train", test_table="buil
     command = (f'sql {db_name} format=json:list and stat=false and include=({test_table}) and '
                f'extend=(+node_name, @table_name) "SELECT round_number, COUNT(*) FROM {train_table} '
                f'GROUP BY round_number"')
-    return rows(execute(conn, command, destination="network"))
+    return rows(query_anylog(conn, command, destination="network"))
 
 
 # ---------------------------------------------------------------- UNS
@@ -153,7 +174,7 @@ def node_of(leaf):
 def parse_leaves(entries, root, site_level=2):
     """`blockchain get uns ... bring.extend object` output -> leaves that point at data."""
     leaves = []
-    for entry in entries or []:
+    for entry in entries if isinstance(entries, list) else []:
         uns, obj = entry.get("uns") or {}, entry.get("object") or {}
         path = str(uns.get("namespace", "")).split("/")
         if path[0] != root or not obj.get("table") or len(path) <= site_level:
@@ -166,9 +187,9 @@ def parse_leaves(entries, root, site_level=2):
 
 def discover(conn, root, site_level=2):
     """Every leaf under root, in one call -> {table: {site: [Leaf, ...]}}."""
-    entries = execute(conn, "blockchain get uns bring.extend object")
+    entries = query_anylog(conn, "blockchain get uns bring.extend object")
     tree = defaultdict(lambda: defaultdict(list))
-    for leaf in parse_leaves(entries if isinstance(entries, list) else [], root, site_level):
+    for leaf in parse_leaves(entries, root, site_level):
         tree[leaf.table][leaf.site].append(leaf)
     for sites in tree.values():
         for leaves in sites.values():
@@ -178,7 +199,7 @@ def discover(conn, root, site_level=2):
 
 def list_communities(conn, root, table):
     """The communities (sites) under root/table in the UNS, in name order."""
-    entries = execute(conn, f"blockchain get uns where [namespace] contains {root}/{table}/")
+    entries = query_anylog(conn, f"blockchain get uns where [namespace] contains {root}/{table}/")
     sites = set()
     for entry in entries if isinstance(entries, list) else []:
         path = str((entry.get("uns") or {}).get("namespace", "")).split("/")
@@ -193,9 +214,9 @@ def get_objects(conn, community, root):
     {table: {"dbms": "mydb", "where": ["building_id = 'Building_13'", ...]}}
     The community's train and test branches both come back, so one query can span both tables.
     """
-    entries = execute(conn, f"blockchain get uns where [namespace] contains /{community}/ bring.extend object")
+    entries = query_anylog(conn, f"blockchain get uns where [namespace] contains /{community}/ bring.extend object")
     tables = {}
-    for leaf in parse_leaves(entries if isinstance(entries, list) else [], root):
+    for leaf in parse_leaves(entries, root):
         found = tables.setdefault(leaf.table, {"dbms": leaf.dbms, "where": []})
         if leaf.where and leaf.where not in found["where"]:
             found["where"].append(leaf.where)
@@ -232,7 +253,7 @@ def sql_command(dbms, sql, options="format=json and stat=false"):
 def fetch(conn, leaves, columns, extra_where=None, limit=None):
     """Rows for one site. AnyLog routes the query to the operator(s) holding the table."""
     dbms, sql = build_sql(leaves, columns, extra_where, limit)
-    return rows(execute(conn, sql_command(dbms, sql), destination="network"))
+    return rows(query_anylog(conn, sql_command(dbms, sql), destination="network"))
 
 
 # ---------------------------------------------------------------- hourly aggregates (OpenSTEF)
@@ -282,7 +303,7 @@ def query_hourly(conn, tables, primary=None, start=None, end=None, aggregates=No
     """One community's hourly aggregates for start <= timestamp < end, across all its tables."""
     command = build_query(tables, primary=primary, start=start, end=end, increments_unit=1,
                           increments_type="hour", aggregates=aggregates)
-    return rows(execute(conn, command, destination="network"))
+    return rows(query_anylog(conn, command, destination="network"))
 
 
 def test_windows(conn, tables, test_table):
@@ -295,6 +316,7 @@ def test_windows(conn, tables, test_table):
     only = {test_table: tables[test_table]}
     sql = (f"SELECT round_number, MIN(timestamp) AS window_start, MAX(timestamp) AS window_end FROM {test_table}"
            f"{_where(only)} GROUP BY round_number ORDER BY round_number")
-    found = rows(execute(conn, sql_command(_dbms(only), sql, "format=json:list and stat=false"), destination="network"))
+    found = rows(query_anylog(conn, sql_command(_dbms(only), sql, "format=json:list and stat=false"),
+                              destination="network"))
     return [{"round": int(r["round_number"]), "start": str(r["window_start"]), "end": str(r["window_end"])}
             for r in found]

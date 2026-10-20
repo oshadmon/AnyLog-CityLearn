@@ -5,7 +5,8 @@ uses (pipeline for publishing, rest for every AnyLog call, fl.server for trainin
 Three jobs, one of each at a time, each started, stopped and watched the same way:
   insert   set up the operators and publish the simulated history once
   live     keep publishing new hours, timestamped from now
-  train    federated training (optionally continuing from the saved model)
+  train    federated training (optionally continuing from the saved model), or with
+           `training_type: openstef`, OpenSTEF forecasts run in the OpenSTEF venv (fl_openstef/job.py)
 
   GET  /api/config                  task description, settings, saved model
   GET  /api/network                 sites, the node holding each, assets, row counts
@@ -14,9 +15,14 @@ Three jobs, one of each at a time, each started, stopped and watched the same wa
   POST /api/jobs/{name}/start       start a job (train takes settings + resume; live takes interval)
   GET  /api/jobs/{name}?since=N     a job's state and its events from N on (the page polls this)
   POST /api/jobs/{name}/stop        stop after the current step
+  GET  /api/openstef/results        the OpenSTEF results file (scores and every forecast)
+  GET  /api/openstef/query?site=    the AnyLog query behind one community's forecast
 """
+import json
 import os
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -31,8 +37,9 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 import pipeline  # noqa: E402
-from rest import build_sql, discover, fetch, node_of, sql_command  # noqa: E402
+from rest import build_query, build_sql, discover, fetch, get_objects, node_of, sql_command  # noqa: E402
 from fl.server import TASKS, load_model, run_training  # noqa: E402
+from fl_openstef.describe import TASK as OPENSTEF_TASK  # noqa: E402  (text only; OpenSTEF runs in its own venv)
 
 CONFIG_FILE = os.environ.get("CITYLEARN_CONFIG", pipeline.CONFIG_FILE)
 
@@ -142,11 +149,109 @@ def live_work(emit, stop, interval):
 
 def train_work(emit, stop, cfg, resume):
     s = settings()
+    if s["training_type"] == "openstef":
+        return openstef_work(emit, stop, s, resume)
     live = JOBS["live"].running()
     until = pipeline.complete_rounds(s, live=True) if live else None
     result = run_training(s["query_node"], cfg, s["results_file"], on_event=emit, stop=stop,
                           model_file=s["model_file"], resume=resume, until_round=until)
+    if result["status"] == "no_new_rounds":
+        spr = int((s["content"].get("fl") or {}).get("steps_per_round", 168))
+        emit({"type": "no_new_rounds", "trained": result["last_round"], "per_site": result.get("per_site", {}),
+              "complete": result.get("complete"), "live": live,
+              "progress": live_progress(spr) if live else None})
     return result["status"]
+
+
+def live_progress(steps_per_round):
+    """Where the live stream is in its newest week, and its measured pace (from the live job's events).
+    {"week": 5, "hour": 152, "of": 168, "seconds_per_hour": 6.1} or None before the first hour."""
+    with JOBS["live"].lock:
+        steps = [e for e in JOBS["live"].events if e.get("type") == "step"][-20:]
+    if not steps:
+        return None
+    last = steps[-1]
+    pace = None
+    same_pass = [e for e in steps if e["step"] <= last["step"]]  # a new pass restarts the step count
+    if len(same_pass) >= 2 and same_pass[-1]["step"] > same_pass[0]["step"]:
+        pace = round((same_pass[-1]["t"] - same_pass[0]["t"]) / (same_pass[-1]["step"] - same_pass[0]["step"]), 1)
+    return {"week": last["round"], "hour": (last["step"] - 1) % steps_per_round + 1, "of": steps_per_round,
+            "seconds_per_hour": pace}
+
+
+def openstef_work(emit, stop, s, resume):
+    """Run fl_openstef/job.py with the OpenSTEF venv's python and pass its events on."""
+    python = s["openstef_python"]
+    if not python or not os.path.isfile(python):
+        raise RuntimeError("OpenSTEF runs in its own venv. Set openstef.python in configs.yaml to that venv's python "
+                           r"(for example C:\...\AnyLog-CityLearn\venv-openstef\Scripts\python.exe)"
+                           + (f"; {python} doesn't exist" if python else ""))
+    live = JOBS["live"].running()
+    stop_file = os.path.join(tempfile.gettempdir(), f"openstef-stop-{os.getpid()}-{time.time_ns()}")
+    command = [python, os.path.join(SRC, "fl_openstef", "job.py"), "--config", CONFIG_FILE, "--stop-file", stop_file]
+    command += (["--resume"] if resume else []) + (["--exclude-latest"] if live else [])
+    env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
+    process = subprocess.Popen(command, cwd=REPO, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               text=True, encoding="utf-8", errors="replace", bufsize=1)
+
+    def relay_stop():  # the job checks for the stop file between communities
+        stop.wait()
+        if process.poll() is None:
+            open(stop_file, "w").close()
+    threading.Thread(target=relay_stop, daemon=True).start()
+
+    status, log, failed = "done", [], None
+    for line in process.stdout:
+        line = line.rstrip()
+        if not line.startswith("@@EVENT "):
+            log = (log + [line])[-25:]
+            print(f"[openstef] {line}")
+            continue
+        event = _clean(json.loads(line[len("@@EVENT "):]))
+        if event["type"] == "exit":
+            status = event["status"]
+        elif event["type"] == "error":
+            failed = event["message"]
+        elif event["type"] == "no_new_rounds":
+            spr = int((s["content"].get("fl") or {}).get("steps_per_round", 168))
+            status = "no_new_rounds"
+            emit({**event, "live": live, "progress": live_progress(spr) if live else None})
+        else:
+            emit(event)
+    process.wait()
+    if os.path.exists(stop_file):
+        os.remove(stop_file)
+    if failed or process.returncode:
+        raise RuntimeError(failed or "OpenSTEF stopped unexpectedly:\n" + "\n".join(log[-8:]))
+    return "stopped" if stop.is_set() and status != "no_new_rounds" else status
+
+
+def openstef_results(s):
+    path = s["openstef_results_file"]
+    if not os.path.isfile(path):
+        return None
+    with open(path) as f:
+        return _clean(json.load(f))
+
+
+def _clean(value):
+    """NaN -> None, so older results files still make valid JSON for the page."""
+    if isinstance(value, float) and value != value:
+        return None
+    if isinstance(value, dict):
+        return {k: _clean(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clean(v) for v in value]
+    return value
+
+
+def openstef_task(s):
+    """The task text, with the run's actual settings filled into the specialist details."""
+    cfg = {"model": "xgb", "quantiles": [0.1, 0.5, 0.9], "train_days": None, "min_train_days": 14, **s["openstef"]}
+    fill = {"model": cfg["model"], "quantiles": ", ".join(f"P{round(q * 100)}" for q in cfg["quantiles"]),
+            "train_days": f"last {cfg['train_days']} days" if cfg.get("train_days") else "everything before it",
+            "min_train_days": cfg["min_train_days"]}
+    return {**OPENSTEF_TASK, "details": [[k, v.format(**fill)] for k, v in OPENSTEF_TASK["details"]]}
 
 
 # ---------- endpoints ----------
@@ -155,14 +260,24 @@ def train_work(emit, stop, cfg, resume):
 def config():
     s = settings()
     training, content = s["training"], s["content"]
-    saved = load_model(s["model_file"])
+    if s["training_type"] == "openstef":
+        done = openstef_results(s) or {}
+        weeks = [e["round"] for e in done.get("rounds", [])]
+        forecast = [e["round"] for e in done.get("rounds", []) if e.get("scores")]  # skipped weeks have none
+        saved = {"last_round": max(weeks), "weeks": len(forecast), "saved": None} if weeks else None
+        task = openstef_task(s)
+    else:
+        saved = load_model(s["model_file"])
+        task = task_for(training).describe()
     return {"query_node": s["query_node"], "uns_root": training.get("uns_root", "citylearn_demo"),
-            "training": training, "task": task_for(training).describe(),
+            "training_type": s["training_type"], "openstef_ready": bool(s["openstef_python"]),
+            "training": training, "task": task,
             "simulation": {"steps": int((content.get("simulation") or {}).get("steps", 24)),
                            "schema": (content.get("simulation") or {}).get("schema")},
             "steps_per_round": int((content.get("fl") or {}).get("steps_per_round", 168)),
             "live_interval": s["live_interval"],
-            "saved_model": {"last_round": saved["last_round"], "saved": saved.get("saved")} if saved else None}
+            "saved_model": {"last_round": saved["last_round"], "saved": saved.get("saved"),
+                            "weeks": saved.get("weeks")} if saved else None}
 
 
 @app.get("/api/network")
@@ -221,6 +336,34 @@ def lookup(table: str, site: str, asset: str = "", limit: int = 5):
         "total_rows": (count[0] if count else {}).get("rows", 0),
         "ms": round((time.time() - started) * 1000),
     }
+
+
+@app.get("/api/openstef/results")
+def openstef_results_view():
+    results = openstef_results(settings())
+    if results is None:
+        raise HTTPException(404, "No OpenSTEF results yet")
+    return results
+
+
+@app.get("/api/openstef/query")
+def openstef_query(site: str):
+    """The hourly query OpenSTEF's forecast for `site` used (its last week's window), as AnyLog receives it."""
+    s = settings()
+    cfg = s["openstef"]
+    tables = get_objects(s["query_node"], site, cfg.get("uns_root") or "citylearn_demo")
+    results = openstef_results(s) or {}
+    windows = [e["window"][site] for e in results.get("rounds", []) if site in e.get("window", {})]
+    start = end = None
+    if windows:
+        import datetime
+        fmt = "%Y-%m-%d %H:%M:%S"
+        first, last = (datetime.datetime.strptime(str(t)[:19], fmt) for t in windows[-1])
+        start = (first - datetime.timedelta(days=int(cfg.get("history_days") or 14))).strftime(fmt)
+        end = (last + datetime.timedelta(hours=1)).strftime(fmt)
+    command = build_query(tables, primary=cfg.get("train_table") or "building_obs_train", start=start, end=end,
+                          increments_unit=1, increments_type="hour", aggregates=cfg.get("aggregates"))
+    return {"site": site, "command": command, "objects": tables, "query_node": s["query_node"]}
 
 
 @app.get("/api/status")
